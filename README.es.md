@@ -20,7 +20,7 @@ Dos modos de operación, seleccionados con un botón mantenido al arrancar:
 | **Operación** (por defecto) | Tocar una tarjeta emparejada → `POST /api/v1/events/tap` → evento de presencia + retroalimentación |
 | **Emparejar** | Tocar una tarjeta nueva → `POST /api/v1/admin/cards/pair` → tarjeta vinculada al estudiante armado |
 
-- **NFC**: RC522 por SPI (se incluye un lector simulado por Serial para desarrollar sin hardware).
+- **NFC**: RC522 por SPI — build por defecto desde TASK-002 (`pio run -t upload` flashea el lector real). El lector simulado por Serial sigue disponible como entorno opcional de desarrollo (`-e esp32dev-mock`).
 - **Identidad**: clave Bearer estática `READER_API_KEY` — la clave ES la identidad del lector.
 - **Retroalimentación**: LED de modo continuo + patrones del LED de eventos + zumbador opcional; cada resultado (éxito / 404 / 409 / 422 / 401 / fallo de red) tiene un patrón distinto y un registro serial bilingüe.
 - **Resiliencia**: lecturas con antirrebote, bucle no bloqueante basado en `millis()`, conexión Wi-Fi acotada con reconexión en segundo plano, tiempos de espera HTTP acotados — el dispositivo nunca se cuelga ni se reinicia por un fallo.
@@ -38,16 +38,27 @@ Dos modos de operación, seleccionados con un botón mantenido al arrancar:
 cp include/secrets.h.example include/secrets.h
 $EDITOR include/secrets.h      # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY
 
-# 2. compilar (lector simulado por defecto — funciona sin RC522)
-pio run -e esp32dev-mock
+# 2. compilar (lector real RC522 — entorno POR DEFECTO desde TASK-002)
+#    cableado: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.es.md)
+pio run
 
-# 3. compilar para hardware real
-pio run -e esp32dev
-
-# 4. pruebas unitarias en el host (sin hardware)
+# 3. pruebas unitarias en el host (sin hardware)
 pio test -e native
 
-# 5. flashear + monitor
+# 4. flashear + monitor (un `pio run -t upload` simple flashea el lector real)
+pio run -e esp32dev -t upload && pio device monitor
+```
+
+En un arranque sano el monitor imprime
+`[NFC] RC522 detected — firmware version 0x92 / detectado` — la
+confirmación positiva de que la radio del lector está viva. Si falta el
+RC522 o está mal cableado, el firmware registra la versión sondeada y los
+pines esperados y **sigue reintentando el init cada 5 s** (corrige el
+cableado con el equipo encendido — sin reiniciar).
+
+### ¿Sin lector conectado? Build de desarrollo (opcional)
+
+```bash
 pio run -e esp32dev-mock -t upload && pio device monitor
 ```
 
@@ -80,7 +91,7 @@ veredictos (tap + emparejar, incl. 404 / 409 / 422 / 401).
 ## Estructura del repositorio
 
 ```text
-platformio.ini            entornos de build: esp32dev | esp32dev-mock | native
+platformio.ini            entornos de build: esp32dev (por defecto: RC522 real) | esp32dev-mock | native
 include/config.h          pines + tiempos (confírmalos contra tu cableado)
 include/secrets.h.example plantilla de credenciales (secrets.h está ignorado por git)
 src/main.cpp              raíz de composición delgada (solo cableado)

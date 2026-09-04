@@ -72,7 +72,9 @@ static LedFeedbackController feedback(PIN_LED_MODE, PIN_LED_EVENT, PIN_BUZZER);
 static CardDebouncer debouncer(CARD_COOLDOWN_MS);
 
 #if defined(PRESENCE_READER_IMPL_RC522)
-static Rc522NfcReader reader(PIN_RC522_SS, PIN_RC522_RST);
+static Rc522NfcReader reader(PIN_RC522_SS, PIN_RC522_RST,
+                             PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI,
+                             &Serial);  // Serial = diagnostics sink
 #elif defined(PRESENCE_READER_IMPL_MOCK)
 static MockSerialNfcReader reader(Serial);
 #endif
@@ -108,8 +110,12 @@ static void printBanner() {
     Serial.println(mode->label());
     Serial.print("Backend: ");
     Serial.println(API_BASE_URL);
+#if defined(PRESENCE_READER_IMPL_RC522)
+    Serial.println("---- present a card to the reader / presenta una tarjeta al lector ----");
+#elif defined(PRESENCE_READER_IMPL_MOCK)
     Serial.println("---- type a UID + Enter to simulate a tap (mock build) ----");
     Serial.println("---- escribe un UID + Enter para simular un toque (build mock) ----");
+#endif
 }
 
 void setup() {
@@ -126,10 +132,16 @@ void setup() {
     mode = selectModeFromPin();
 
     if (!reader.begin()) {
-        // RC522 init failed (wiring?) — log bilingual, keep booting so the
-        // human sees network status and can re-check wiring.
-        Serial.println("[!] NFC reader init failed / Fallo de init del lector NFC");
-        Serial.println("    Check wiring: docs/HARDWARE_SETUP.md");
+        // RC522 init failed — the driver already printed the probed
+        // version + expected pins + 3.3 V reminder. Keep booting: the
+        // device retries init every RC522_REINIT_INTERVAL_MS in loop(),
+        // and the human still sees network status meanwhile.
+        // / Fallo de init — el driver ya imprimió la versión sondeada, los
+        // pines esperados y el recordatorio de 3.3 V. El arranque sigue:
+        // loop() reintenta cada RC522_REINIT_INTERVAL_MS.
+        Serial.println("[!] NFC reader init failed — will keep retrying /");
+        Serial.println("    fallo de init del lector — se seguira reintentando");
+        Serial.println("    Wiring table: docs/HARDWARE_SETUP.md");
     }
 
     printBanner();

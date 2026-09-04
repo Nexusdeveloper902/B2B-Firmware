@@ -20,7 +20,7 @@ Two operating modes, selected by a button held at boot:
 | **Operation** (default) | Tap a paired card → `POST /api/v1/events/tap` → presence event + feedback |
 | **Pairing** | Tap a fresh card → `POST /api/v1/admin/cards/pair` → card linked to the armed student |
 
-- **NFC**: RC522 over SPI (a serial mock reader is included for hardware-less development).
+- **NFC**: RC522 over SPI — the default build since TASK-002 (`pio run -t upload` flashes the real reader). A serial mock reader remains available as an opt-in dev env (`-e esp32dev-mock`).
 - **Identity**: static Bearer `READER_API_KEY` — the key IS the reader identity.
 - **Feedback**: continuous mode LED + event LED patterns + optional buzzer; every outcome (success / 404 / 409 / 422 / 401 / network failure) has a distinct pattern and a bilingual serial log.
 - **Resilience**: debounced reads, non-blocking `millis()` loop, bounded Wi-Fi connect with background reconnect, bounded HTTP timeouts — the device never hangs or crashes on failure.
@@ -38,16 +38,26 @@ Two operating modes, selected by a button held at boot:
 cp include/secrets.h.example include/secrets.h
 $EDITOR include/secrets.h          # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY
 
-# 2. compile (mock reader default — works without an RC522 attached)
-pio run -e esp32dev-mock
+# 2. compile (RC522 real reader — the DEFAULT env since TASK-002)
+#    wiring: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.md)
+pio run
 
-# 3. compile for real hardware
-pio run -e esp32dev
-
-# 4. host-side unit tests (no hardware needed)
+# 3. host-side unit tests (no hardware needed)
 pio test -e native
 
-# 5. flash + monitor
+# 4. flash + monitor  (plain `pio run -t upload` flashes the real reader)
+pio run -e esp32dev -t upload && pio device monitor
+```
+
+On a healthy boot the monitor prints
+`[NFC] RC522 detected — firmware version 0x92 / detectado` — the positive
+confirmation the reader radio is alive. If the RC522 is missing/miswired,
+the firmware logs the probed version + expected pins and **keeps retrying
+init every 5 s** (fix the wiring with the device running — no reboot).
+
+### No reader attached? Development build (opt-in)
+
+```bash
 pio run -e esp32dev-mock -t upload && pio device monitor
 ```
 
@@ -79,7 +89,7 @@ firmware's own `ResponseParser` — 8/8 verdicts (tap + pairing, incl. 404 /
 ## Repository layout
 
 ```text
-platformio.ini            build envs: esp32dev | esp32dev-mock | native
+platformio.ini            build envs: esp32dev (default: real RC522) | esp32dev-mock | native
 include/config.h          pins + timing (confirm against your wiring)
 include/secrets.h.example credential template (secrets.h is gitignored)
 src/main.cpp              thin composition root (wiring only)
