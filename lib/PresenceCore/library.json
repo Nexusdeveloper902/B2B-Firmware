@@ -1,0 +1,9 @@
+{
+  "name": "PresenceCore",
+  "version": "1.0.0",
+  "description": "Hardware-independent reader logic: payloads, response parsing, mode strategies, debounce, LED patterns. Host-testable pure C++.",
+  "keywords": ["presence", "nfc", "core"],
+  "license": "Proprietary",
+  "frameworks": "*",
+  "platforms": "*"
+}
