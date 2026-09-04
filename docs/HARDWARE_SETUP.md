@@ -31,18 +31,23 @@ the ESP32's 3V3 pin, never 5 V/VIN.
 | RC522 pin | ESP32 GPIO | config.h constant |
 |---|---|---|
 | SDA (SS)  | **5**  | `PIN_RC522_SS` |
-| SCK       | **18** | hardware VSPI (fixed) |
-| MOSI      | **23** | hardware VSPI (fixed) |
-| MISO      | **19** | hardware VSPI (fixed) |
+| SCK       | **18** | `PIN_RC522_SCK` (VSPI clock) |
+| MOSI      | **23** | `PIN_RC522_MOSI` (VSPI data out) |
+| MISO      | **19** | `PIN_RC522_MISO` (VSPI data in) |
 | RST       | **27** | `PIN_RC522_RST` |
 | 3.3V / VCC | 3V3  | — |
 | GND       | GND   | — |
 
-> ⚠ WIRING CONFIRMATION: GPIO 5 / 27 are the defaults for SS/RST. Some
-> RC522 breakouts and some ESP32 boards use different conventions (e.g.
-> SS=21, RST=22). If the reader fails to init (the serial log prints
-> `[!] NFC reader init failed`), re-check these two pins first and adjust
-> `include/config.h`.
+> ⚠ WIRING CONFIRMATION: all five RC522 signal pins are configurable in
+> `include/config.h` (defaults above). Some RC522 breakouts and some ESP32
+> boards use different conventions (e.g. SS=21, RST=22). If the reader is
+> not detected, the serial log prints the probed pins + expected ones in
+> the `[NFC] RC522 NOT responding (...)` line — re-check the wiring
+> against that line and adjust `config.h`.
+>
+> ✅ On a healthy boot the log prints `[NFC] RC522 detected — firmware
+> version 0x92 / detectado` (0x91 = v1.0, 0x92 = v2.0, 0x90/0x88 = some
+> clones). That line is your positive confirmation the radio is alive.
 
 ### Mode-select button
 
@@ -98,21 +103,40 @@ The serial monitor prints a bilingual line for every event (see the
 
 | Environment | Reader | Use |
 |---|---|---|
-| `esp32dev-mock` (default) | `MockSerialNfcReader` — type a UID + Enter in the Serial Monitor | development without the RC522 attached; still exercises Wi-Fi, HTTP, modes, feedback on a real board |
-| `esp32dev` | `Rc522NfcReader` (RC522 over SPI) | the real reader |
+| `esp32dev` (**default**) | `Rc522NfcReader` (RC522 over SPI) | the real reader — `pio run` and `pio run -t upload` target it since TASK-002 |
+| `esp32dev-mock` (opt-in) | `MockSerialNfcReader` — type a UID + Enter in the Serial Monitor | development without the RC522 attached; still exercises Wi-Fi, HTTP, modes, feedback on a real board |
 | `native` | — | host-side unit tests (`pio test -e native`) |
 
 ## Flashing
 
 ```bash
 cp include/secrets.h.example include/secrets.h   # then edit: Wi-Fi, backend URL, reader key
-pio run -e esp32dev -t upload                     # real reader
-pio run -e esp32dev-mock -t upload                # mock reader
+pio run -e esp32dev -t upload                     # real reader (default env since TASK-002)
+#   equivalent to: pio run -t upload
+pio run -e esp32dev-mock -t upload                # mock reader (opt-in)
+
 pio device monitor                                # 115200 baud
 ```
 
 The reader key comes from the B2B-Core seeder output (`./run setup` in
 the backend repo prints every reader's `api_key`).
+
+## Reader self-recovery (TASK-002)
+
+The RC522 driver tracks its own health: if init fails at boot (wiring,
+power) or the reader stops answering at runtime (glitch, ESD,
+brown-out), the firmware retries `PCD_Init` every 5 s
+(`RC522_REINIT_INTERVAL_MS`) — non-blocking, no reboot needed. Fix the
+wiring while the device runs and the `[NFC] RC522 detected ...` line
+appears at the next retry. Boot lines of the real-reader build:
+
+```text
+Reader impl / Implementacion: RC522 (SPI)
+[NFC] RC522 detected — firmware version 0x92 / detectado
+---- present a card to the reader / presenta una tarjeta al lector ----
+```
+
+The mock build instead prints `---- type a UID + Enter ... ----`.
 
 ## Libraries (managed by PlatformIO, `platformio.ini`)
 
@@ -129,6 +153,7 @@ the backend repo prints every reader's `api_key`).
 | `WIFI_RECONNECT_INTERVAL_MS` | 10000 | background retry cadence after a drop |
 | `HTTP_TIMEOUT_MS` | 10000 | per-request HTTP timeout |
 | `CARD_COOLDOWN_MS` | 2000 | same-UID re-read debounce window |
+| `RC522_REINIT_INTERVAL_MS` | 5000 | RC522 init retry cadence while the reader is not answering (self-recovery) |
 | `MODE_BUTTON_SETTLE_MS` | 50 | boot-time button debounce |
 
 All loop timing is `millis()`-based and non-blocking; there is no `delay()`

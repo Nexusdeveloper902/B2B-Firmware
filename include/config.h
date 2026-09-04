@@ -19,10 +19,21 @@
 // ---------------------------------------------------------------------------
 // NFC reader — RC522 over SPI / Lector NFC — RC522 por SPI
 // ---------------------------------------------------------------------------
-// ESP32 hardware SPI (VSPI) default pins — do not normally change:
-//   SCK  = GPIO18, MISO = GPIO19, MOSI = GPIO23
-#define PIN_RC522_SS    5   // RC522 SDA (SS)  — confirm against wiring
-#define PIN_RC522_RST   27  // RC522 RST       — confirm against wiring
+// ESP32 hardware SPI (VSPI) pins — explicit so non-default wiring can be
+// changed here without touching code. Defaults are the VSPI bus pins.
+// / Pines SPI explícitos (bus VSPI) para poder cambiar el cableado aquí.
+#define PIN_RC522_SCK   18  // RC522 SCK  (VSPI clock)   — confirm wiring
+#define PIN_RC522_MISO  19  // RC522 MISO (VSPI data in) — confirm wiring
+#define PIN_RC522_MOSI  23  // RC522 MOSI (VSPI data out)— confirm wiring
+#define PIN_RC522_SS    5   // RC522 SDA (SS)            — confirm wiring
+#define PIN_RC522_RST   27  // RC522 RST                 — confirm wiring
+
+// When the reader fails init (or dies at runtime: wiring glitch, ESD,
+// brown-out), retry PCD_Init on this cadence instead of staying dead
+// until a reboot. millis()-based, non-blocking.
+// / Cadencia de reintento de PCD_Init si el lector falla (cableado, ESD,
+// caída de tensión). Basado en millis(), no bloqueante.
+#define RC522_REINIT_INTERVAL_MS  5000
 
 // ---------------------------------------------------------------------------
 // Mode-select button (read once at boot) / Botón de selección de modo
