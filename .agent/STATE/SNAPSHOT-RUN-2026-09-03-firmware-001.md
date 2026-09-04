@@ -52,3 +52,11 @@ checklist) — RC522 radio, Wi-Fi association, LED/button physics.
    captive-portal provisioning.
 3. b2b-core side: dashboard "Pair new card" button follow-up lives in
    THAT repo's task file, not here.
+
+## Addendum — fresh-checkout buildability
+
+A fresh clone now compiles out of the box: main.cpp falls back to
+secrets.h.example placeholder values with a bilingual #warning when the
+gitignored secrets.h is absent (fix merged after the independent
+main-verification exposed the unconditional include). Buildable-main is
+a property of the checked-out tree, not of a developer's local files.

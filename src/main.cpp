@@ -24,7 +24,21 @@
 #include <string>
 
 #include "config.h"
+
+// Real credentials live ONLY in the gitignored include/secrets.h.
+// A fresh checkout (no secrets.h yet) still compiles — against the
+// placeholder values of secrets.h.example — so `pio run` works before
+// the developer copies the template. The device will then fail Wi-Fi/
+// HTTP gracefully (bounded, NetworkError feedback) until real values
+// are provided. / Las credenciales reales viven SOLO en el gitignored
+// include/secrets.h. Un checkout nuevo aún compila — con los valores de
+// marcador de secrets.h.example — hasta que se copien valores reales.
+#if __has_include("secrets.h")
 #include "secrets.h"
+#else
+#warning "include/secrets.h not found — building with example placeholder values (cp include/secrets.h.example include/secrets.h). / No se encontró include/secrets.h — se compila con valores de ejemplo."
+#include "secrets.h.example"
+#endif
 
 #include "CoreTypes.h"
 #include "FeedbackController.h"
