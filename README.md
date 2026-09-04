@@ -54,6 +54,19 @@ pio run -e esp32dev-mock -t upload && pio device monitor
 With the **mock build** flashed (even to a bare board), type a card UID +
 Enter in the Serial Monitor to simulate a tap — the full pipeline runs.
 
+### Backend integration E2E (no hardware needed)
+
+```bash
+# against a local B2B-Core checkout (uses throwaway DB + real HTTP)
+B2B_CORE=../B2B-Core B2B_PHP=php ./scripts/e2e_backend.sh
+```
+
+The harness sends the firmware's **byte-identical payloads** (built by the
+firmware's own `PayloadBuilder`) to a real running backend, captures every
+documented response case, and feeds the **real responses** through the
+firmware's own `ResponseParser` — 8/8 verdicts (tap + pairing, incl. 404 /
+409 / 422 / 401).
+
 ## Documentation
 
 | Doc | Contents |
@@ -72,11 +85,12 @@ include/secrets.h.example credential template (secrets.h is gitignored)
 src/main.cpp              thin composition root (wiring only)
 lib/PresenceCore/         pure C++: payloads, parsers, modes, debounce, patterns
 lib/NfcReader/            NfcReader interface + RC522 + serial mock
-lib/ModeSystem -> lib/PresenceCore/Modes.{h,cpp}
 lib/Feedback/             FeedbackController interface + LED implementation
 lib/ApiClient/            ApiClient interface + ESP32 HTTPClient transport
 lib/WifiService/          bounded connect + non-blocking reconnect
-test/                     host-side native unit tests
+test/                     host-side native unit tests (48)
+tools/e2e/                E2E harness: firmware payloads + parser vs real backend
+scripts/e2e_backend.sh    backend integration E2E (throwaway DB, real HTTP)
 docs/                     bilingual real documentation (EN/ES)
 ```
 
