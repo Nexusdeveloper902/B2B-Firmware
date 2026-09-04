@@ -55,6 +55,19 @@ Con el **build simulado** flasheado (incluso en una placa sin nada conectado),
 escribe un UID de tarjeta + Enter en el Monitor Serial para simular un
 toque — se ejecuta todo el flujo.
 
+### E2E de integración con el backend (sin hardware)
+
+```bash
+# contra un checkout local de B2B-Core (BD desechable + HTTP real)
+B2B_CORE=../B2B-Core B2B_PHP=php ./scripts/e2e_backend.sh
+```
+
+El arnés envía los **payloads idénticos byte a byte** del firmware
+(construidos por su propio `PayloadBuilder`) a un backend real en
+ejecución, captura cada caso de respuesta documentado y pasa las
+**respuestas reales** por el `ResponseParser` del firmware — 8/8
+veredictos (tap + emparejar, incl. 404 / 409 / 422 / 401).
+
 ## Documentación
 
 | Documento | Contenido |
@@ -73,11 +86,12 @@ include/secrets.h.example plantilla de credenciales (secrets.h está ignorado po
 src/main.cpp              raíz de composición delgada (solo cableado)
 lib/PresenceCore/         C++ puro: payloads, parsers, modos, antirrebote, patrones
 lib/NfcReader/            interfaz NfcReader + RC522 + simulador serial
-lib/ModeSystem -> lib/PresenceCore/Modes.{h,cpp}
 lib/Feedback/             interfaz FeedbackController + implementación LED
 lib/ApiClient/            interfaz ApiClient + transporte HTTPClient ESP32
 lib/WifiService/          conexión acotada + reconexión no bloqueante
-test/                     pruebas unitarias nativas en el host
+test/                     pruebas unitarias nativas en el host (48)
+tools/e2e/                arnés E2E: payloads y parser del firmware vs backend real
+scripts/e2e_backend.sh    E2E de integración con el backend (BD desechable, HTTP real)
 docs/                     documentación real bilingüe (EN/ES)
 ```
 
