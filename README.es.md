@@ -21,9 +21,10 @@ Serial:
 | Modo | Comportamiento |
 |---|---|
 | **Operación** (al arrancar) | Tocar una tarjeta emparejada → `POST /api/v1/events/tap` → evento de presencia + retroalimentación |
-| **Emparejar** | Tocar una tarjeta nueva → `POST /api/v1/admin/cards/pair` → tarjeta vinculada al estudiante armado |
+| **Emparejar** | Tocar una tarjeta nueva → `POST /api/v1/admin/cards/pair` → tarjeta vinculada al estudiante armado — guía completa del operador: [docs/PAIRING.es.md](docs/PAIRING.es.md) |
 
 - **Cambio de modo**: contraseña por consola serial (`MODE_PASSWORD` en secrets.h) alterna OPERACIÓN <-> EMPAREJAR en ejecución — 2 parpadeos lentos del LED de EVENTO confirman el cambio; 3 contraseñas erróneas bloquean la consola 10 s (configurable). Los caracteres tecleados se muestran como `*`.
+- **El dispositivo enseña su propio flujo** (TASK-004): cada cambio de modo imprime una pista bilingüe de qué hacer a continuación, y las respuestas 401/409/422/404 añaden líneas de remediación — p. ej. el 401 señala los pasos de provisionamiento de la clave de lector en [docs/PAIRING.es.md](docs/PAIRING.es.md).
 
 - **NFC**: RC522 por SPI — build por defecto desde TASK-002 (`pio run -t upload` flashea el lector real). El lector simulado por Serial sigue disponible como entorno opcional de desarrollo (`-e esp32dev-mock`).
 - **Identidad**: clave Bearer estática `READER_API_KEY` — la clave ES la identidad del lector.
@@ -89,6 +90,7 @@ veredictos (tap + emparejar, incl. 404 / 409 / 422 / 401).
 | Documento | Contenido |
 |---|---|
 | [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md) | Cableado, pines, librerías, flasheo, tabla de patrones LED |
+| [docs/PAIRING.es.md](docs/PAIRING.es.md) | Modo de emparejamiento de punta a punta: flujo armar-antes-de-emparejar, provisionamiento de la clave de lector, cada resultado + arreglo, FAQ, seguridad |
 | [docs/API_INTEGRATION.es.md](docs/API_INTEGRATION.es.md) | El contrato exacto del backend que implementa este firmware (ambos modos, todos los casos de respuesta) |
 | [docs/MANUAL_VERIFICATION_CHECKLIST.es.md](docs/MANUAL_VERIFICATION_CHECKLIST.es.md) | Lista de verificación de banco para una persona con la placa real |
 | [.agent/](.agent/PROJECT.md) | Registros del protocolo de agentes (tareas, ADRs, ejecuciones, estado) |
@@ -105,7 +107,7 @@ lib/NfcReader/            interfaz NfcReader + RC522 + simulador serial
 lib/Feedback/             interfaz FeedbackController + implementación LED
 lib/ApiClient/            interfaz ApiClient + transporte HTTPClient ESP32
 lib/WifiService/          conexión acotada + reconexión no bloqueante
-test/                     pruebas unitarias nativas en el host (48)
+test/                     pruebas unitarias nativas en el host (65)
 tools/e2e/                arnés E2E: payloads y parser del firmware vs backend real
 scripts/e2e_backend.sh    E2E de integración con el backend (BD desechable, HTTP real)
 docs/                     documentación real bilingüe (EN/ES)

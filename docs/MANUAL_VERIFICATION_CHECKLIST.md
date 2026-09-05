@@ -11,9 +11,13 @@ and host-side logic tests are verified separately — see `.agent/RUNS/`).
 **Setup for every session:**
 
 1. B2B-Core running: `./run setup && ./run serve` (note the machine's LAN
-   IP, e.g. `192.168.1.50`); reader `api_key` printed by `./run setup`.
+   IP, e.g. `192.168.1.50`); reader `api_key` printed by `./run setup`
+   (re-running it re-prints the SAME keys — it never rotates existing
+   ones). Key provisioning details: [PAIRING.md](PAIRING.md)
+   §Prerequisites.
 2. `include/secrets.h` filled: `WIFI_SSID`, `WIFI_PASSWORD`,
-   `API_BASE_URL` = `http://<LAN-IP>:8000`, `READER_API_KEY`.
+   `API_BASE_URL` = `http://<LAN-IP>:8000`, `READER_API_KEY`,
+   `MODE_PASSWORD`.
 3. Firmware flashed: `pio run -e esp32dev -t upload && pio device monitor`
    (use `esp32dev-mock` instead to drive taps by typing UIDs — the same
    steps apply, substituting "type UID + Enter" for "tap card").
@@ -48,14 +52,17 @@ mirror the LED patterns.
 ## 3. Operation mode — failure cases (device must stay responsive)
 
 - [ ] 3.1 Tap an unknown UID → 2 blinks + serial `[404] Card not
-      recognized / Tarjeta no reconocida`. (Send `Accept-Language`-style
-      ES message only if the backend was configured so; EN default.)
+      recognized` followed by the TASK-004 "unpaired card? switch to
+      PAIRING…" remediation lines. (Send `Accept-Language`-style ES
+      message only if the backend was configured so; EN default.)
 - [ ] 3.2 Turn Wi-Fi off (or move out of range) → tap → 5 fast blinks +
       serial `[NET] network failure / fallo de red`; the loop keeps
       running (repeat taps keep answering, MODE LED keeps blinking).
 - [ ] 3.3 Set a WRONG `READER_API_KEY` in secrets.h, reflash → tap → 6
       fast blinks + `[401] reader key rejected / clave de lector
-      rechazada`. Restore the correct key afterward.
+      rechazada` followed by the TASK-004 key-provisioning remediation
+      lines (they point at docs/PAIRING.md §Prerequisites). Restore the
+      correct key afterward.
 - [ ] 3.4 Stop the backend server → tap → `[NET]` pattern; restart the
       backend → tap again → success pattern (recovery confirmed).
 - [ ] 3.5 Rest the SAME card on the reader ~5 s → exactly ONE event
@@ -65,12 +72,14 @@ mirror the LED patterns.
 
 - [ ] 4.1 In the Serial Monitor, type the mode password (`MODE_PASSWORD`
       from secrets.h) + Enter → serial shows
-      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, typed
-      characters appear as `*`, and the EVENT LED plays 2 slow blinks.
+      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, the
+      TASK-004 `[MODE] arm a session first…` hint line, typed characters
+      appear as `*`, and the EVENT LED plays 2 slow blinks.
 - [ ] 4.2 MODE LED shows the pairing idle pattern: two short blips every
       ~2 s (clearly different from operation mode).
 - [ ] 4.3 Tap a paired card WITHOUT any pairing session armed → 3 blinks
-      + serial `[409] No pairing session active / No hay ninguna sesion...`.
+      + serial `[409] No pairing session active` followed by the TASK-004
+      "arm a session first…" remediation lines.
 - [ ] 4.4 Type a WRONG password three times → after the third, serial
       shows `[MODE] input locked ... ` and even the correct password is
       refused; wait 10 s → the correct password works again.
@@ -79,8 +88,9 @@ mirror the LED patterns.
 
 ## 5. Pairing mode — successful pairing
 
-- [ ] 5.1 Arm a session from the backend host (admin token — see
-      `docs/API_INTEGRATION.md`):
+- [ ] 5.1 Arm a session from the backend host (admin token — full
+      walkthrough incl. how to mint the admin PAT:
+      [PAIRING.md](PAIRING.md) §Prerequisites):
       `curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing -H "Authorization: Bearer <admin-PAT>" -H "Accept: application/json"`
       → `{"status":"ok","student_id":<id>,"expires_at":"..."}` (45 s window).
 - [ ] 5.2 Within the window, tap a FRESH (never-paired) card UID.
@@ -95,8 +105,9 @@ mirror the LED patterns.
 
 - [ ] 6.1 Arm a session for student A. Tap the card that is already
       linked to student B (from §5 or the seeder).
-- [ ] 6.2 4 blinks + serial `[422] Card already paired / La tarjeta ya
-      esta emparejada`.
+- [ ] 6.2 4 blinks + serial `[422] Card already paired` followed by the
+      TASK-004 "use a FRESH card — the session stays armed" remediation
+      lines.
 - [ ] 6.3 **Backend check**: card B remains linked to student B (not
       reassigned). The pending session for A remains armed (not consumed)
       — tapping a fresh card for A within the window still succeeds.

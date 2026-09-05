@@ -8,6 +8,23 @@ const char* modeKindToString(ModeKind kind) {
     return kind == ModeKind::Operation ? "operation" : "pairing";
 }
 
+// TASK-004: the hints below are the device teaching its own flow. The
+// "45 s" in the pairing hint mirrors the B2B-Core default
+// (presence.pairing_window_seconds, ADR-020); it is display-only
+// guidance — the authoritative window is always the backend's.
+// / Las pistas enseñan el flujo del dispositivo. El "45 s" refleja el
+// valor por defecto del backend; es solo guía visual.
+const char* OperationMode::hint() const {
+    return "tap a PAIRED card to log the event / acerca una tarjeta EMPAREJADA\n"
+           "     para registrar el evento";
+}
+
+const char* PairingMode::hint() const {
+    return "arm a session first (admin, 45 s window), then tap a FRESH card —\n"
+           "     docs/PAIRING.md / arma primero una sesion (admin, ventana de 45 s),\n"
+           "     luego acerca una tarjeta NUEVA";
+}
+
 ApiCall OperationMode::onCardTap(const std::string& credentialUid) {
     ApiCall call;
     call.type = ApiCallType::Tap;

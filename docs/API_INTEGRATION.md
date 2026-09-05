@@ -60,7 +60,9 @@ default; switch modes with the serial-console password — TASK-003).
 
 Any unrecognized combination parses to `UnknownError` → long solid
 pattern; the loop continues normally (the device never wedges on a
-malformed response).
+malformed response). Since TASK-004, the 401/404 tap lines are followed
+by bilingual remediation hints (key provisioning / pair-the-card
+pointers to PAIRING.md).
 
 ## PAIRING MODE — POST /api/v1/admin/cards/pair
 
@@ -68,7 +70,9 @@ Triggered by a card tap while the device is in PAIRING mode (entered by
 typing the serial-console mode password — TASK-003).
 The endpoint was built in B2B-Core as `TASK-010-card-pairing-endpoint`
 (two-step arm-then-pair design; arm window default 45 s — see B2B-Core
-ADR-020).
+ADR-020). The complete operator guide — why arming comes first,
+reader-key provisioning, arming how-to with an admin PAT, per-outcome
+troubleshooting, FAQ — is [PAIRING.md](PAIRING.md) (TASK-004).
 
 **Request** (built by `Presence::buildPairPayload`):
 
@@ -90,7 +94,8 @@ ADR-020).
 ### Arming a pairing session (backend side, NOT done by firmware)
 
 Pairing succeeds only while a pending pairing session is armed for a
-student. Arm it from an admin session or personal access token:
+student. Arm it from an admin session or personal access token (how to
+mint an admin PAT: [PAIRING.md](PAIRING.md) §Prerequisites):
 
 ```bash
 # against the running B2B-Core backend

@@ -22,6 +22,7 @@ class OperationMode : public Mode {
 public:
     ModeKind kind() const override { return ModeKind::Operation; }
     const char* label() const override { return "OPERATION / OPERACION"; }
+    const char* hint() const override;
     ApiCallType callType() const override { return ApiCallType::Tap; }
 
     ApiCall onCardTap(const std::string& credentialUid) override;
@@ -34,6 +35,7 @@ class PairingMode : public Mode {
 public:
     ModeKind kind() const override { return ModeKind::Pairing; }
     const char* label() const override { return "PAIRING / EMPAREJAR"; }
+    const char* hint() const override;
     ApiCallType callType() const override { return ApiCallType::PairCard; }
 
     ApiCall onCardTap(const std::string& credentialUid) override;

@@ -129,11 +129,43 @@ void test_pairing_interpret_all_failure_kinds(void) {
     }
 }
 
+// --- mode hints (TASK-004): the device teaches its own flow ---------------
+
+void test_pairing_hint_teaches_arm_first_flow(void) {
+    Presence::PairingMode pair;
+    const char* hint = pair.hint();
+
+    // EN half: arm first + window + fresh card
+    TEST_ASSERT_NOT_NULL(strstr(hint, "arm a session first"));
+    TEST_ASSERT_NOT_NULL(strstr(hint, "45 s window"));
+    TEST_ASSERT_NOT_NULL(strstr(hint, "FRESH card"));
+    // ES half: arma primero + ventana + tarjeta nueva
+    TEST_ASSERT_NOT_NULL(strstr(hint, "arma primero"));
+    TEST_ASSERT_NOT_NULL(strstr(hint, "tarjeta NUEVA"));
+    // Points at the dedicated doc (the full walkthrough lives there)
+    TEST_ASSERT_NOT_NULL(strstr(hint, "PAIRING.md"));
+}
+
+void test_mode_hints_bilingual_distinct_nonempty(void) {
+    Presence::OperationMode op;
+    Presence::PairingMode pair;
+
+    // Both hints say something in both languages
+    TEST_ASSERT_TRUE(strlen(op.hint()) > 0);
+    TEST_ASSERT_TRUE(strlen(pair.hint()) > 0);
+    TEST_ASSERT_NOT_NULL(strstr(op.hint(), "PAIRED"));
+    TEST_ASSERT_NOT_NULL(strstr(op.hint(), "EMPAREJADA"));
+    // And the two modes never share guidance text
+    TEST_ASSERT_TRUE(strcmp(op.hint(), pair.hint()) != 0);
+}
+
 void runModeTests() {
     RUN_TEST(test_operation_mode_routes_tap_to_events_endpoint);
     RUN_TEST(test_pairing_mode_routes_tap_to_pair_endpoint);
     RUN_TEST(test_mode_labels_are_bilingual);
     RUN_TEST(test_mode_kind_polymorphism);
+    RUN_TEST(test_pairing_hint_teaches_arm_first_flow);
+    RUN_TEST(test_mode_hints_bilingual_distinct_nonempty);
     RUN_TEST(test_operation_interpret_success);
     RUN_TEST(test_operation_interpret_all_failure_kinds);
     RUN_TEST(test_pairing_interpret_success);
