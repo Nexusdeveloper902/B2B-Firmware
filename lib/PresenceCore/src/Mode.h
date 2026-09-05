@@ -27,6 +27,17 @@ public:
     virtual const char* label() const = 0;
 
     /**
+     * Bilingual operator guidance printed right after a mode switch.
+     * The Serial Monitor is the device's only screen — the hint is how
+     * the device teaches its own flow (TASK-004; e.g. pairing needs an
+     * admin-armed session BEFORE any tap). May contain '\n' + spaces for
+     * multi-line output; main.cpp prefixes it with "[MODE] ".
+     * / Guía bilingüe para el operador, impresa tras cambiar de modo.
+     * Puede contener '\n' + espacios para varias líneas.
+     */
+    virtual const char* hint() const = 0;
+
+    /**
      * Build the HTTP call this mode makes for a scanned card UID.
      * Construye la llamada HTTP que este modo hace para un UID leído.
      */

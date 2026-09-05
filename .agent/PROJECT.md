@@ -22,7 +22,9 @@ regardless. A serial mock reader exists for development without hardware.
 
 ## Two operating modes
 1. PAIRING MODE — associates a newly scanned card's UID with a student
-   record (calls the pairing endpoint built in b2b-core TASK-010).
+   record (calls the pairing endpoint built in b2b-core TASK-010). The
+   full operator guide — arm-then-pair flow, reader-key provisioning,
+   per-outcome troubleshooting — is docs/PAIRING.md + .es.md (TASK-004).
 2. OPERATION MODE — normal use: tap a paired card, log a presence event
    (calls POST /api/v1/events/tap).
 

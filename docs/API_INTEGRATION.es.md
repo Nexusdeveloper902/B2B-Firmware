@@ -64,14 +64,20 @@ TASK-003).
 
 Cualquier combinación no reconocida se parsea como `UnknownError` →
 patrón sólido largo; el bucle continúa con normalidad (el dispositivo
-nunca se bloquea ante una respuesta malformada).
+nunca se bloquea ante una respuesta malformada). Desde TASK-004, las
+líneas 401/404 del tap van seguidas de pistas de remediación bilingües
+(provisionamiento de clave / cómo emparejar la tarjeta, apuntando a
+PAIRING.es.md).
 
 ## MODO EMPAREJAR — POST /api/v1/admin/cards/pair
 
 Se dispara al tocar una tarjeta con el equipo en modo EMPAREJAR (se entra
 escribiendo la contraseña de modo por la consola serial — TASK-003). El endpoint se construyó en B2B-Core como
 `TASK-010-card-pairing-endpoint` (diseño de dos pasos armar-y-emparejar;
-ventana por defecto 45 s — ver ADR-020 de B2B-Core).
+ventana por defecto 45 s — ver ADR-020 de B2B-Core). La guía completa del
+operador — por qué armar va primero, provisionamiento de la clave de
+lector, cómo armar con un PAT de admin, solución de problemas por
+resultado, FAQ — está en [PAIRING.es.md](PAIRING.es.md) (TASK-004).
 
 **Petición** (construida por `Presence::buildPairPayload`):
 
@@ -94,7 +100,8 @@ ventana por defecto 45 s — ver ADR-020 de B2B-Core).
 
 El emparejamiento solo tiene éxito mientras haya una sesión pendiente
 armada para un estudiante. Ármala desde sesión de admin o token de acceso
-personal:
+personal (cómo acuñar un PAT de admin: [PAIRING.es.md](PAIRING.es.md)
+§Prerrequisitos):
 
 ```bash
 # contra el backend B2B-Core en ejecución

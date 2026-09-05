@@ -13,9 +13,12 @@ host se verifican aparte — ver `.agent/RUNS/`).
 
 1. B2B-Core en ejecución: `./run setup && ./run serve` (anota la IP LAN de
    la máquina, p. ej. `192.168.1.50`); el `api_key` del lector lo imprime
-   `./run setup`.
+   `./run setup` (re-ejecutarlo re-imprime las MISMAS claves — nunca rota
+   las existentes). Detalles de provisionamiento de la clave:
+   [PAIRING.es.md](PAIRING.es.md) §Prerrequisitos.
 2. `include/secrets.h` completado: `WIFI_SSID`, `WIFI_PASSWORD`,
-   `API_BASE_URL` = `http://<IP-LAN>:8000`, `READER_API_KEY`.
+   `API_BASE_URL` = `http://<IP-LAN>:8000`, `READER_API_KEY`,
+   `MODE_PASSWORD`.
 3. Firmware flasheado: `pio run -e esp32dev -t upload && pio device monitor`
    (usa `esp32dev-mock` para manejar los toques escribiendo UIDs — los
    mismos pasos aplican, sustituyendo «escribe UID + Enter» por «toca la
@@ -54,14 +57,18 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 ## 3. Modo operación — casos de fallo (el dispositivo debe seguir respondiendo)
 
 - [ ] 3.1 Toca un UID desconocido → 2 destellos + serial `[404] Card not
-      recognized / Tarjeta no reconocida`.
+      recognized` seguido de las líneas de remediación TASK-004
+      («¿tarjeta sin emparejar? pasa a EMPAREJAR…»). (El mensaje ES solo si
+      el backend está configurado así; EN por defecto).
 - [ ] 3.2 Apaga el Wi-Fi (o aléjate del alcance) → toque → 5 destellos
       rápidos + serial `[NET] network failure / fallo de red`; el bucle
       sigue corriendo (toques repetidos siguen respondiendo, el LED de
       MODO sigue parpadeando).
 - [ ] 3.3 Pon una `READER_API_KEY` INCORRECTA en secrets.h, reflashea →
       toque → 6 destellos rápidos + `[401] reader key rejected / clave de
-      lector rechazada`. Restaura la clave correcta después.
+      lector rechazada` seguido de las líneas de remediación TASK-004 de
+      provisionamiento de clave (apuntan a docs/PAIRING.es.md
+      §Prerrequisitos). Restaura la clave correcta después.
 - [ ] 3.4 Detén el servidor del backend → toque → patrón `[NET]`;
       reinicia el backend → toca de nuevo → patrón de éxito (recuperación
       confirmada).
@@ -73,15 +80,16 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 
 - [ ] 4.1 En el Monitor Serial, escribe la contraseña de modo
       (`MODE_PASSWORD` de secrets.h) + Enter → el serial muestra
-      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, los
-      caracteres tecleados aparecen como `*` y el LED de EVENTO hace
-      2 destellos lentos.
+      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, la línea de
+      pista TASK-004 (`[MODE] arm a session first… / arma primero una
+      sesion…`), los caracteres tecleados aparecen como `*` y el LED de
+      EVENTO hace 2 destellos lentos.
 - [ ] 4.2 El LED de MODO muestra el patrón de reposo de emparejamiento:
       dos destellos cortos cada ~2 s (claramente distinto del modo
       operación).
 - [ ] 4.3 Toca una tarjeta emparejada SIN sesión de emparejamiento armada
-      → 3 destellos + serial `[409] No pairing session active / No hay
-      ninguna sesion...`.
+      → 3 destellos + serial `[409] No pairing session active` seguido de
+      las líneas de remediación TASK-004 («arma primero una sesion…»).
 - [ ] 4.4 Escribe una contraseña ERRÓNEA tres veces → tras la tercera, el
       serial muestra `[MODE] input locked ...` y hasta la contraseña
       correcta se rechaza; espera 10 s → la contraseña correcta vuelve a
@@ -91,8 +99,9 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 
 ## 5. Modo emparejar — emparejamiento exitoso
 
-- [ ] 5.1 Arma una sesión desde el host del backend (token admin — ver
-      `docs/API_INTEGRATION.es.md`):
+- [ ] 5.1 Arma una sesión desde el host del backend (token admin —
+      recorrido completo incl. cómo acuñar el PAT de admin:
+      [PAIRING.es.md](PAIRING.es.md) §Prerrequisitos):
       `curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing -H "Authorization: Bearer <PAT-admin>" -H "Accept: application/json"`
       → `{"status":"ok","student_id":<id>,"expires_at":"..."}` (ventana de 45 s).
 - [ ] 5.2 Dentro de la ventana, toca una tarjeta NUEVA (nunca emparejada).
@@ -109,8 +118,9 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 
 - [ ] 6.1 Arma una sesión para el estudiante A. Toca la tarjeta que ya
       está vinculada al estudiante B (del §5 o del seeder).
-- [ ] 6.2 4 destellos + serial `[422] Card already paired / La tarjeta ya
-      esta emparejada`.
+- [ ] 6.2 4 destellos + serial `[422] Card already paired` seguido de las
+      líneas de remediación TASK-004 («usa una tarjeta NUEVA — la sesión
+      sigue armada»).
 - [ ] 6.3 **Comprobación en el backend**: la tarjeta B sigue vinculada al
       estudiante B (no se reasigna). La sesión pendiente de A sigue armada
       (no consumida) — tocar una tarjeta nueva para A dentro de la ventana

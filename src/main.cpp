@@ -8,8 +8,8 @@
  * The three-way interface split (NfcReader / Mode / FeedbackController)
  * means this file contains NO business logic — it wires interfaces:
  *
- *   boot: Serial → reader.begin() → read mode-select pin → Wi-Fi (bounded)
- *         → indicate mode on the MODE LED
+ *   boot: Serial → reader.begin() → Wi-Fi (bounded) → indicate mode on
+ *         the MODE LED (boots OPERATION; ADR-005)
  *   loop: wifi.tick → reader.poll → debouncer → mode.onCardTap →
  *         api.post → ResponseParser → mode.interpret → feedback.showEvent
  *         (all non-blocking; no delay() in loop)
@@ -188,6 +188,15 @@ static void switchMode() {
     Serial.print("[MODE] switched to / cambiado a: ");
     Serial.println(mode->label());
 
+    // TASK-004: the device teaches its own flow — the strategy's hint says
+    // what to do NEXT in this mode (pairing: arm a session first, then a
+    // fresh card; operation: tap paired cards).
+    // / El dispositivo enseña su flujo — la pista de la estrategia dice
+    // qué hacer AHORA en este modo.
+    Serial.print("[MODE] ");
+    Serial.print(mode->hint());  // bilingual; may be multi-line
+    Serial.println();
+
     // EVENT LED: operator acknowledgment; MODE LED: the new idle pattern
     // (the continuous mode indication is the source of truth on the bench).
     showModeEvent(FeedbackKind::ModeSwitched);
@@ -272,6 +281,18 @@ static void pollConsole(uint32_t now) {
 // Card tap pipeline (identical for both modes; the mode strategy decides
 // the endpoint, the parser+interpreter decide the feedback)
 // ---------------------------------------------------------------------------
+
+// TASK-004: a 401 is always a key-PROVISIONING failure (the backend has
+// no readers row matching this READER_API_KEY) — point the operator at
+// the fix instead of a bare rejection. Printed for both modes.
+// / Un 401 siempre es un fallo de PROVISIONAMIENTO de la clave — señala
+// la solución en vez de un rechazo pelado. Se imprime en ambos modos.
+static void printReaderKeyRemediation() {
+    Serial.println("     READER_API_KEY has no matching reader row on the backend /");
+    Serial.println("     READER_API_KEY no tiene una fila de lector en el backend —");
+    Serial.println("     fix / arreglo: docs/PAIRING.md (provisioning / provisionamiento)");
+}
+
 static void handleCardTap(const std::string& uid) {
     Serial.println();
     Serial.print("[NFC] card / tarjeta: ");
@@ -302,9 +323,16 @@ static void handleCardTap(const std::string& uid) {
             case TapOutcome::CardNotRecognized:
                 Serial.print("[404] ");
                 Serial.println(result.message.c_str());
+                // TASK-004: the natural next step for an unknown card is
+                // pairing — say so. / El siguiente paso natural de una
+                // tarjeta desconocida es emparejarla — decirlo.
+                Serial.println("     unpaired card? switch to PAIRING and arm a session —");
+                Serial.println("     docs/PAIRING.md / ¿tarjeta sin emparejar? cambia a");
+                Serial.println("     EMPAREJAR y arma una sesion — docs/PAIRING.md");
                 break;
             case TapOutcome::AuthFailure:
                 Serial.println("[401] reader key rejected / clave de lector rechazada");
+                printReaderKeyRemediation();
                 break;
             case TapOutcome::NetworkError:
                 Serial.println("[NET] network failure / fallo de red");
@@ -327,13 +355,23 @@ static void handleCardTap(const std::string& uid) {
             case PairOutcome::NoActiveSession:
                 Serial.print("[409] ");
                 Serial.println(result.message.c_str());
+                // TASK-004: teach the arm-then-pair flow at the moment it
+                // bites. / Enseñar el flujo arma-then-pair justo cuando muerde.
+                Serial.println("     arm a session first, then tap within the window —");
+                Serial.println("     docs/PAIRING.md / arma primero una sesion y acerca");
+                Serial.println("     la tarjeta dentro de la ventana — docs/PAIRING.md");
                 break;
             case PairOutcome::AlreadyPaired:
                 Serial.print("[422] ");
                 Serial.println(result.message.c_str());
+                // The backend does NOT consume the session on a 422 — the
+                // operator can retry immediately with a fresh card.
+                Serial.println("     use a FRESH card — the session stays armed / usa una");
+                Serial.println("     tarjeta NUEVA — la sesion sigue armada");
                 break;
             case PairOutcome::AuthFailure:
                 Serial.println("[401] reader key rejected / clave de lector rechazada");
+                printReaderKeyRemediation();
                 break;
             case PairOutcome::NetworkError:
                 Serial.println("[NET] network failure / fallo de red");

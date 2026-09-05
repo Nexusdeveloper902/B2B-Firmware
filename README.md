@@ -20,9 +20,10 @@ toggles to Pairing and back at any time by typing the **mode password**
 | Mode | Behavior |
 |---|---|
 | **Operation** (boot default) | Tap a paired card → `POST /api/v1/events/tap` → presence event + feedback |
-| **Pairing** | Tap a fresh card → `POST /api/v1/admin/cards/pair` → card linked to the armed student |
+| **Pairing** | Tap a fresh card → `POST /api/v1/admin/cards/pair` → card linked to the armed student — full operator guide: [docs/PAIRING.md](docs/PAIRING.md) |
 
 - **Mode switching**: serial-console password (`MODE_PASSWORD` in secrets.h) toggles OPERATION <-> PAIRING at runtime — 2 slow EVENT-LED blinks confirm the switch; 3 wrong passwords lock the console for 10 s (configurable). Typed characters echo as `*`.
+- **The device teaches its own flow** (TASK-004): every mode switch prints a bilingual hint of what to do next, and 401/409/422/404 responses print remediation lines — e.g. the 401 points at the reader-key provisioning steps in [docs/PAIRING.md](docs/PAIRING.md).
 
 - **NFC**: RC522 over SPI — the default build since TASK-002 (`pio run -t upload` flashes the real reader). A serial mock reader remains available as an opt-in dev env (`-e esp32dev-mock`).
 - **Identity**: static Bearer `READER_API_KEY` — the key IS the reader identity.
@@ -86,6 +87,7 @@ firmware's own `ResponseParser` — 8/8 verdicts (tap + pairing, incl. 404 /
 | Doc | Contents |
 |---|---|
 | [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md) | Wiring, pins, libraries, flashing, LED pattern table |
+| [docs/PAIRING.md](docs/PAIRING.md) | Pairing mode end to end: arm-then-pair flow, reader-key provisioning, every outcome + fix, FAQ, security |
 | [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) | The exact backend contract this firmware implements (both modes, all response cases) |
 | [docs/MANUAL_VERIFICATION_CHECKLIST.md](docs/MANUAL_VERIFICATION_CHECKLIST.md) | Bench checklist for a human with the real board |
 | [.agent/](.agent/PROJECT.md) | Agent protocol records (tasks, ADRs, runs, state) |
@@ -102,7 +104,7 @@ lib/NfcReader/            NfcReader interface + RC522 + serial mock
 lib/Feedback/             FeedbackController interface + LED implementation
 lib/ApiClient/            ApiClient interface + ESP32 HTTPClient transport
 lib/WifiService/          bounded connect + non-blocking reconnect
-test/                     host-side native unit tests (48)
+test/                     host-side native unit tests (65)
 tools/e2e/                E2E harness: firmware payloads + parser vs real backend
 scripts/e2e_backend.sh    backend integration E2E (throwaway DB, real HTTP)
 docs/                     bilingual real documentation (EN/ES)
