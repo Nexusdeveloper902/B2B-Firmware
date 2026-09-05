@@ -15,6 +15,7 @@ void runResponseTests();
 void runModeTests();
 void runDebounceTests();
 void runConsoleTests();
+void runAuthTests();
 
 // Shared by every test (Unity calls these around each RUN_TEST).
 void setUp() {}
@@ -28,6 +29,7 @@ int main() {
     runModeTests();       // mode strategies + feedback mapping
     runDebounceTests();   // card debounce + LED patterns/players
     runConsoleTests();    // TASK-003: serial console (LineBuffer + ModeConsole)
+    runAuthTests();       // TASK-007: Authorization header VALUE (Bearer)
 
     return UNITY_END();
 }

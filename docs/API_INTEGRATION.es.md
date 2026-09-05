@@ -19,6 +19,15 @@ firmware.
   la identidad del lector; el backend jamás confía en un id de lector
   suministrado por el cliente. La clave la imprime el DemoSeeder de
   B2B-Core (`./run setup`).
+  TASK-007: el firmware construye esta cabecera **explícitamente** — el
+  prefijo literal `Bearer ` sale de `Presence::bearerAuthorizationValue()`
+  (PresenceCore, fijado por `test_auth.cpp`) y `EspApiClient` la envía con
+  `addHeader`. Nunca volver a `HTTPClient::setAuthorization(key)`: ese
+  método prefija su **tipo de autorización por defecto `Basic`**, el
+  backend ignora por completo `Authorization: Basic <clave>`, y todo el
+  hardware real recibía 401 con una clave perfectamente válida antes de
+  esta corrección (la verificación con curl nunca lo detectó — curl envía
+  la cabecera tal cual).
 - **Content-Type**: `application/json` (solo el endpoint de clasificación
   usa multipart — no lo usa este firmware; ver «Fuera de alcance»).
 - **Localización**: el texto de los `message` de error lo localiza el

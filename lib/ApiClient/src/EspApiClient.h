@@ -7,6 +7,18 @@
  * - Fixed timeout (config.h: HTTP_TIMEOUT_MS)
  * - Never throws; transport failures return status < 0 so the caller maps
  *   them to FeedbackKind::NetworkError and the device stays responsive.
+ *
+ * TASK-007: the Authorization header is built EXPLICITLY (the literal
+ * "Bearer " prefix comes from PresenceCore's bearerAuthorizationValue,
+ * pinned by host tests). HTTPClient::setAuthorization(key) must NOT be
+ * used: it prefixes the value with the default authorization type
+ * "Basic", the backend ignores "Authorization: Basic <key>", and every
+ * real-hardware call answered 401 with a valid key until this fix.
+ * / TASK-007: la cabecera Authorization se construye EXPLICITAMENTE (el
+ * prefijo "Bearer " viene de bearerAuthorizationValue en PresenceCore,
+ * fijado por pruebas del host). No usar setAuthorization(key): prefija
+ * "Basic" y el backend ignoraba la cabecera — todo el hardware real
+ * recibia 401 con una clave valida hasta esta correccion.
  */
 #pragma once
 
@@ -37,7 +49,15 @@ public:
         http.setTimeout(timeoutMs_);
         http.addHeader("Content-Type", "application/json");
         http.addHeader("Accept", "application/json");
-        http.setAuthorization(bearerKey_.c_str());  // Bearer <key>
+        // TASK-007: explicit Authorization VALUE — see the header comment.
+        // addHeader is safe here: setAuthorization() is never called, so
+        // HTTPClient's built-in auth block stays empty and this is the
+        // single Authorization header on the wire.
+        // / TASK-007: VALOR de Authorization explicito — ver la cabecera.
+        // addHeader es seguro: nunca se llama a setAuthorization(), asi
+        // que esta es la unica cabecera Authorization en el cable.
+        http.addHeader("Authorization",
+                       bearerAuthorizationValue(bearerKey_).c_str());
 
         int code = http.POST(jsonBody.c_str());
         response.status = code;
