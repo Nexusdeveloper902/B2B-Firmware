@@ -78,6 +78,32 @@ keys; it re-prints the existing credentials). Note the LAN IP, e.g.
 `192.168.1.6:8000`. The seeder creates the demo admin
 (`admin@presence.test` / `password`) and four students.
 
+Setup prints **two tables you will actually need** — the **cards** table
+(the `credential_uid` values: the only UIDs the tap endpoint recognizes)
+and, right below it, the **readers** table (the Bearer keys). Seeded
+`credential_uid`s are **random 12-character uppercase strings, one per
+student** — they are minted at first seed and stay stable across re-runs
+(firstOrCreate). Sample shape (your values will differ):
+
+```text
+ [EN] Cards — use credential_uid as {"credential_uid": "..."} in POST /api/v1/events/tap
+ [ES] Tarjetas — usa credential_uid como {"credential_uid": "..."} en POST /api/v1/events/tap
+ Student / Estudiante        credential_uid
+ Maria González              M9TN530AIT7N
+ Carlos Pérez                4K2P81DXR7WQ
+ ...
+ [EN] Readers — send as header: Authorization: Bearer <api_key>
+ [ES] Lectores — envía como cabecera: Authorization: Bearer <api_key>
+ Reader / Lector             Type        active_event_type      api_key (Bearer)
+ Demo Reader — Classroom/PAE classroom   CLASS_ATTENDANCE       9f2c...  (32 chars)
+ Demo Reader — Recycling     recycling   RECYCLING_DEPOSIT      51ab...
+```
+
+> Keep both tables in your terminal scrollback (or re-run `./run setup`
+> later — the same values print again). The key goes into
+> `READER_API_KEY`; a `credential_uid` is what you feed the verification
+> curl below and any manual tap test.
+
 ### 2. READER_API_KEY registered on the backend — the `[401]` checklist
 
 This is the step a `[401] reader key rejected` points at. The backend
@@ -118,19 +144,39 @@ created server-side by the school's admin tooling — the firmware never
 participates in that.
 
 **Verify the key before touching firmware** (from any machine that
-reaches the backend):
+reaches the backend). The check needs a **real** seeded
+`credential_uid` — with an invented UID you cannot distinguish "key
+broken" from "UID unknown" at a glance (see the table below):
 
 ```bash
 curl -i -X POST http://<backend>/api/v1/events/tap \
      -H "Authorization: Bearer <READER_API_KEY>" \
      -H "Content-Type: application/json" \
-     -d '{"credential_uid": "A-SEEDED-UID"}'
+     -d '{"credential_uid": "PASTE-A-REAL-credential_uid-HERE"}'
 ```
 
-A `401` here means the key itself is not provisioned (fix here first).
-A `404 Card not recognized` means the key is **fine** — you simply used a
-UID no card row has (expected with an invented UID). A `200` means both
-the key and that seeded card are live.
+**Where to get a real `credential_uid`** (pick one):
+
+- The **cards table** in your `./run setup` output — the table printed
+  right **above** the readers table (re-run `./run setup` any time: it
+  re-prints the SAME cards, it never regenerates them).
+- On the backend host:
+
+  ```bash
+  php artisan tinker
+  >>> App\Models\Card::where('status', 'active')->pluck('credential_uid', 'id')
+  ```
+
+- Any card **you** paired through the PAIRING flow: its UID is the one
+  the device printed as `[NFC] card / tarjeta: <uid>` when you tapped.
+
+Reading the answer — each HTTP status has exactly one meaning:
+
+| HTTP | Meaning for THIS check |
+|---|---|
+| `401` | The key is **not provisioned** — no `readers` row matches it. Fix it here (Option A/B above) before touching firmware. |
+| `404 Card not recognized` | **The key check PASSED.** The backend already accepted the reader identity (401 would have been returned otherwise); only the card lookup failed — the UID is invented, mistyped, or unpaired. Your key is fine; use a real `credential_uid` to see the full loop. |
+| `200` | Key **and** that card are both live — the tap loop works end to end. |
 
 ### 3. Firmware side
 
@@ -288,6 +334,15 @@ created active. Check the response body of the pairing call (was it really
 ---
 
 ## FAQ
+
+**The verification curl answered `404 Card not recognized` — is my key
+broken?** No — it is the opposite. `401` is the "key not provisioned"
+answer. `404` is produced by the tap handler **after** the reader
+identity was accepted, so a `404` proves the key works; only the card
+lookup failed (invented or mistyped UID, or a card nobody has paired).
+It usually means the example UID was a placeholder rather than a real
+seeded `credential_uid` — see [Prerequisites §2](#2-reader_api_key-registered-on-the-backend--the-401-checklist)
+for where the real ones live, then re-run the curl to see the `200`.
 
 **Can the reader pair itself with the backend (device enrollment)?**
 No — deliberately. A device that can self-authorize is a rogue-reader

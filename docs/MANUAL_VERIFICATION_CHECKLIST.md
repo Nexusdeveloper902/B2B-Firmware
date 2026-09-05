@@ -11,10 +11,12 @@ and host-side logic tests are verified separately — see `.agent/RUNS/`).
 **Setup for every session:**
 
 1. B2B-Core running: `./run setup && ./run serve` (note the machine's LAN
-   IP, e.g. `192.168.1.50`); reader `api_key` printed by `./run setup`
-   (re-running it re-prints the SAME keys — it never rotates existing
-   ones). Key provisioning details: [PAIRING.md](PAIRING.md)
-   §Prerequisites.
+   IP, e.g. `192.168.1.50`). Setup prints TWO tables you will need:
+   the **cards** table (seeded `credential_uid`s — the only UIDs a tap
+   recognizes) and the **readers** table (`api_key` per reader).
+   Re-running setup re-prints the SAME values — it never rotates existing
+   ones. Key provisioning + where to find a real `credential_uid`:
+   [PAIRING.md](PAIRING.md) §Prerequisites.
 2. `include/secrets.h` filled: `WIFI_SSID`, `WIFI_PASSWORD`,
    `API_BASE_URL` = `http://<LAN-IP>:8000`, `READER_API_KEY`,
    `MODE_PASSWORD`.
@@ -41,8 +43,10 @@ mirror the LED patterns.
 
 ## 2. Operation mode — successful tap
 
-- [ ] 2.1 Tap a known, paired card (use a `credential_uid` printed by the
-      B2B-Core seeder; in mock build, type it + Enter).
+- [ ] 2.1 Tap a known, paired card (use a real seeded `credential_uid`
+      from the **cards table** of the `./run setup` output — see
+      [PAIRING.md](PAIRING.md) Prerequisites 1/2 for the exact place
+      and a tinker lookup; in mock build, type it + Enter).
 - [ ] 2.2 EVENT LED: solid ~1.5 s (success pattern). Buzzer chirps if
       present.
 - [ ] 2.3 Serial prints `[OK] event logged / evento registrado — <name> (<type>)`.

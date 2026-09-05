@@ -25,6 +25,10 @@ regardless. A serial mock reader exists for development without hardware.
    record (calls the pairing endpoint built in b2b-core TASK-010). The
    full operator guide — arm-then-pair flow, reader-key provisioning,
    per-outcome troubleshooting — is docs/PAIRING.md + .es.md (TASK-004).
+   Its Prerequisites also pin where the real seeded `credential_uid`s
+   live (the cards table every `./run setup` prints, right above the
+   readers table) and what 401 vs 404 means for the key check (a 404
+   means the key was ACCEPTED; TASK-005).
 2. OPERATION MODE — normal use: tap a paired card, log a presence event
    (calls POST /api/v1/events/tap).
 

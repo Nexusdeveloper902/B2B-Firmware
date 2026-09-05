@@ -12,10 +12,12 @@ host se verifican aparte — ver `.agent/RUNS/`).
 **Preparación para cada sesión:**
 
 1. B2B-Core en ejecución: `./run setup && ./run serve` (anota la IP LAN de
-   la máquina, p. ej. `192.168.1.50`); el `api_key` del lector lo imprime
-   `./run setup` (re-ejecutarlo re-imprime las MISMAS claves — nunca rota
-   las existentes). Detalles de provisionamiento de la clave:
-   [PAIRING.es.md](PAIRING.es.md) §Prerrequisitos.
+   la máquina, p. ej. `192.168.1.50`). El setup imprime DOS tablas que
+   necesitarás: la de **tarjetas** (`credential_uid` sembrados — los
+   ÚNICOS UIDs que un toque reconoce) y la de **lectores** (`api_key` por
+   lector). Re-ejecutar setup re-imprime los MISMOS valores — nunca rota
+   los existentes. Provisionamiento de la clave + dónde conseguir un
+   `credential_uid` real: [PAIRING.es.md](PAIRING.es.md) §Prerrequisitos.
 2. `include/secrets.h` completado: `WIFI_SSID`, `WIFI_PASSWORD`,
    `API_BASE_URL` = `http://<IP-LAN>:8000`, `READER_API_KEY`,
    `MODE_PASSWORD`.
@@ -44,8 +46,10 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 ## 2. Modo operación — toque exitoso
 
 - [ ] 2.1 Toca una tarjeta conocida y emparejada (usa un `credential_uid`
-      impreso por el seeder de B2B-Core; en el build simulado, escríbelo
-      + Enter).
+      sembrado real de la **tabla de tarjetas** de la salida de
+      `./run setup` — mira [PAIRING.es.md](PAIRING.es.md) Prerrequisitos
+      1/2 para el lugar exacto y una consulta por tinker; en el build
+      simulado, escríbelo + Enter).
 - [ ] 2.2 LED de EVENTO: sólido ~1.5 s (patrón de éxito). El zumbador
       pita si está presente.
 - [ ] 2.3 El serial imprime `[OK] event logged / evento registrado —
