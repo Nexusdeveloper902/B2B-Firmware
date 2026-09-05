@@ -1,13 +1,13 @@
 # TASK-005-pairing-docs-real-uids
 
 User report (2026-09-05, bench): after TASK-004 the operator provisioned
-the REAL reader key (copied `xxj2Yydn...` from the readers table their
+the REAL reader key (copied the real key from the readers table their
 `./run setup` printed — the earlier 401 was solved), then ran the
 §Prerequisites-2 verification curl **verbatim from docs/PAIRING.md**:
 
 ```text
 curl -i -X POST http://192.168.1.6:8000/api/v1/events/tap \
-     -H "Authorization: Bearer xxj2YydnI5bbMhM0duOnU6Q8kjFQRRBH" \
+     -H "Authorization: Bearer <READER_API_KEY-from-readers-table>" \
      -d '{"credential_uid": "A-SEEDED-UID"}'
 → HTTP 404 {"status":"error","message":"Card not recognized"}
 ```
