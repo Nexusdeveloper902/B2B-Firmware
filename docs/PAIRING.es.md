@@ -82,6 +82,33 @@ las credenciales existentes). Anota la IP de LAN, p. ej.
 `192.168.1.6:8000`. El seeder crea el admin demo
 (`admin@presence.test` / `password`) y cuatro estudiantes.
 
+El setup imprime **dos tablas que sí vas a necesitar** — la tabla de
+**tarjetas** (los `credential_uid`: los ÚNICOS UIDs que el endpoint de
+toque reconoce) y, justo debajo, la tabla de **lectores** (las claves
+Bearer). Los `credential_uid` sembrados son **cadenas aleatorias de 12
+caracteres en mayúsculas, una por estudiante** — se generan en la primera
+siembra y permanecen estables en re-ejecuciones (firstOrCreate). Forma
+de ejemplo (tus valores serán distintos):
+
+```text
+ [EN] Cards — use credential_uid as {"credential_uid": "..."} in POST /api/v1/events/tap
+ [ES] Tarjetas — usa credential_uid como {"credential_uid": "..."} en POST /api/v1/events/tap
+ Student / Estudiante        credential_uid
+ Maria González              M9TN530AIT7N
+ Carlos Pérez                4K2P81DXR7WQ
+ ...
+ [EN] Readers — send as header: Authorization: Bearer <api_key>
+ [ES] Lectores — envía como cabecera: Authorization: Bearer <api_key>
+ Reader / Lector             Type        active_event_type      api_key (Bearer)
+ Demo Reader — Classroom/PAE classroom   CLASS_ATTENDANCE       9f2c...  (32 chars)
+ Demo Reader — Recycling     recycling   RECYCLING_DEPOSIT      51ab...
+```
+
+> Conserva ambas tablas en el scrollback de tu terminal (o re-ejecuta
+> `./run setup` más tarde — se imprimen los mismos valores). La clave va
+> en `READER_API_KEY`; un `credential_uid` es lo que alimenta el curl de
+> verificación de abajo y cualquier prueba manual de toque.
+
 ### 2. READER_API_KEY registrada en el backend — la lista de chequeo del `[401]`
 
 Este es el paso al que apunta un `[401] clave de lector rechazada`. El
@@ -123,20 +150,40 @@ sus claves) se crean del lado del servidor por la herramienta de admin del
 colegio — el firmware nunca participa en eso.
 
 **Verifica la clave ANTES de tocar el firmware** (desde cualquier máquina
-que alcance el backend):
+que alcance el backend). La comprobación necesita un `credential_uid`
+sembrado **real** — con un UID inventado no puedes distinguir de un vistazo
+"clave rota" de "UID desconocido" (ver la tabla de abajo):
 
 ```bash
 curl -i -X POST http://<backend>/api/v1/events/tap \
      -H "Authorization: Bearer <READER_API_KEY>" \
      -H "Content-Type: application/json" \
-     -d '{"credential_uid": "UN-UID-SEMILLADO"}'
+     -d '{"credential_uid": "PEGA-AQUI-UN-credential_uid-REAL"}'
 ```
 
-Un `401` aquí significa que la clave misma no está provisionada (corrígelo
-primero aquí). Un `404 Card not recognized` significa que la clave está
-**bien** — solo usaste un UID que ninguna tarjeta tiene (esperable con un
-UID inventado). Un `200` significa que tanto la clave como esa tarjeta
-sembrada están vivas.
+**Dónde conseguir un `credential_uid` real** (elige uno):
+
+- La **tabla de tarjetas** de tu salida de `./run setup` — la tabla
+  impresa justo **encima** de la de lectores (re-ejecuta `./run setup`
+  cuando quieras: re-imprime las MISMAS tarjetas, nunca las regenera).
+- En el host del backend:
+
+  ```bash
+  php artisan tinker
+  >>> App\Models\Card::where('status', 'active')->pluck('credential_uid', 'id')
+  ```
+
+- Cualquier tarjeta que **tú** hayas emparejado con el flujo de
+  EMPAREJAR: su UID es el que el dispositivo imprimió como
+  `[NFC] card / tarjeta: <uid>` al tocarla.
+
+Cómo leer la respuesta — cada código HTTP tiene exactamente un significado:
+
+| HTTP | Significado para ESTA comprobación |
+|---|---|
+| `401` | La clave **no está provisionada** — ninguna fila de `readers` coincide con ella. Corrígelo aquí (Opción A/B de arriba) antes de tocar el firmware. |
+| `404 Card not recognized` | **La comprobación de clave PASÓ.** El backend ya aceptó la identidad del lector (de lo contrario habría devuelto 401); solo falló la búsqueda de la tarjeta — el UID es inventado, mal tecleado o sin emparejar. Tu clave está bien; usa un `credential_uid` real para ver el flujo completo. |
+| `200` | La clave **y** esa tarjeta están vivas — el flujo de toque funciona de extremo a extremo. |
 
 ### 3. Lado del firmware
 
@@ -301,6 +348,16 @@ el servidor.
 ---
 
 ## Preguntas frecuentes
+
+**El curl de verificación respondió `404 Card not recognized` — ¿mi clave
+está rota?** No — es lo contrario. `401` es la respuesta de "clave sin
+provisionar". El `404` lo produce el manejador del toque **después** de
+que la identidad del lector fue aceptada, así que un `404` demuestra que
+la clave funciona; solo falló la búsqueda de la tarjeta (UID inventado o
+mal tecleado, o una tarjeta que nadie ha emparejado). Suele significar
+que el UID del ejemplo era un marcador y no un `credential_uid` sembrado
+real — mira [Prerrequisitos §2](#2-reader_api_key-registrada-en-el-backend--la-lista-de-chequeo-del-401)
+para saber dónde viven los reales, y re-ejecuta el curl para ver el `200`.
 
 **¿Puede el lector emparejarse solo con el backend (registro del
 dispositivo)?** No — deliberadamente. Un dispositivo que puede
