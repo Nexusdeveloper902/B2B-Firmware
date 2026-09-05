@@ -103,9 +103,15 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 
 ## 5. Modo emparejar — emparejamiento exitoso
 
-- [ ] 5.1 Arma una sesión desde el host del backend (token admin —
-      recorrido completo incl. cómo acuñar el PAT de admin:
-      [PAIRING.es.md](PAIRING.es.md) §Prerrequisitos):
+- [ ] 5.1 Arma una sesión para el estudiante (decisión de admin en el
+      backend). Recomendado — el escritorio de emparejamiento del panel
+      (B2B-Core TASK-011): inicia sesión como admin → página
+      **Emparejar tarjetas** en la barra → **Armar emparejamiento** en
+      la fila del estudiante (cuenta regresiva en vivo + línea de éxito
+      en la página; recorrido completo:
+      [PAIRING.es.md](PAIRING.es.md) Prerrequisitos 4). Alternativa de
+      automatización (curl + PAT de admin — cómo acuñarlo:
+      [PAIRING.es.md](PAIRING.es.md) Prerrequisitos 4):
       `curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing -H "Authorization: Bearer <PAT-admin>" -H "Accept: application/json"`
       → `{"status":"ok","student_id":<id>,"expires_at":"..."}` (ventana de 45 s).
 - [ ] 5.2 Dentro de la ventana, toca una tarjeta NUEVA (nunca emparejada).

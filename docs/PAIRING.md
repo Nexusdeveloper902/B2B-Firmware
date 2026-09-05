@@ -23,10 +23,12 @@ Pairing is **two steps, by design, in this order**:
 
 ```text
 STEP 1 (backend, admin)                STEP 2 (device, any operator)
-POST /api/v1/admin/students/{id}/      1. type the MODE_PASSWORD in the
-     arm-pairing                          Serial Monitor → PAIRING mode
-  → opens a 45 s window               2. tap a FRESH card within it
-                                        3. [OK] card paired to: <student>
+Dashboard "Pair cards" page ->         1. type the MODE_PASSWORD in the
+click "Arm pairing" on the student        Serial Monitor -> PAIRING mode
+(or, for automation: curl POST          2. tap a FRESH card within it
+ .../students/{id}/arm-pairing         3. [OK] card paired to: <student>
+ with an admin PAT)
+  -> opens a 45 s window
 ```
 
 **Arming happens BEFORE tapping.** There is no way to pair a card from the
@@ -185,15 +187,36 @@ Reading the answer — each HTTP status has exactly one meaning:
 - Flashed and monitoring: `pio run -e esp32dev -t upload && pio device
   monitor`. Boot banner ends in OPERATION mode.
 
-### 4. An admin token to arm with
+### 4. A way to arm — dashboard page (recommended) or admin token
 
-Arming is `auth:sanctum` + `role:admin` — an admin **session** (dashboard)
-or a **personal access token** (PAT). To mint a PAT on the backend host:
+Arming requires an admin decision on the backend. Pick ONE:
+
+**Option 1 — the dashboard pairing desk (recommended; B2B-Core
+TASK-011, zero setup).** Log into the dashboard as the admin (demo:
+`admin@presence.test` / `password`), open **Pair cards** in the top
+nav (`/admin/pairing`), and click **Arm pairing** on the student's
+row. The page shows the live 45 s countdown, prints the success line
+the moment your tap pairs the card, and keeps a recently-paired
+history — you never touch curl, tokens, or the serial monitor for the
+arming side. This is the normal way to pair students.
+
+**Option 2 — an admin token (for scripts/automation).** Arming is
+`auth:sanctum` + `role:admin` — a session cookie (the dashboard does
+this for you in Option 1) or a **personal access token** (PAT). To
+mint a PAT on the backend host:
 
 ```bash
 php artisan tinker
 >>> App\Models\User::where('email', 'admin@presence.test')
 ...     ->first()->createToken('pairing-arm')->plainTextToken;
+```
+
+Then arm per student:
+
+```bash
+curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing \
+     -H "Authorization: Bearer <admin-PAT>" \
+     -H "Accept: application/json"
 ```
 
 (Admins get `403`-free access; a teacher token is refused with `403`,
@@ -209,7 +232,10 @@ Step by step, with the exact serial lines the firmware prints (TASK-004
 builds print guidance lines after every status; earlier builds print the
 first line only):
 
-1. **Arm for the student** (backend host, within 45 s of the tap):
+1. **Arm for the student** (within 45 s of the tap). Recommended — the
+   dashboard pairing desk: log in as admin, open **Pair cards**, click
+   **Arm pairing** on the student's row; the page shows the countdown
+   and will print the success line for you. Automation alternative:
 
    ```bash
    curl -X POST http://192.168.1.6:8000/api/v1/admin/students/3/arm-pairing \
@@ -350,7 +376,9 @@ hole; keys are born server-side ([Option A/B/C](#prerequisites-do-these-once)).
 
 **Who can arm a pairing?** Admins (Sanctum session or PAT). Teachers are
 refused with `403`, guests with `401` — enforced in the backend, not in
-this firmware.
+this firmware. Since B2B-Core TASK-011 the admin dashboard's **Pair
+cards** page is the one-click way (no PAT needed); the curl form stays
+for scripts.
 
 **Why 45 seconds?** Long enough to walk from the desk to the reader and
 tap; short enough to not leave standing invitations. It is the backend's

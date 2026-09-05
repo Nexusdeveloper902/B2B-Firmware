@@ -28,7 +28,10 @@ regardless. A serial mock reader exists for development without hardware.
    Its Prerequisites also pin where the real seeded `credential_uid`s
    live (the cards table every `./run setup` prints, right above the
    readers table) and what 401 vs 404 means for the key check (a 404
-   means the key was ACCEPTED; TASK-005).
+   means the key was ACCEPTED; TASK-005). Since B2B-Core TASK-011 the guide's RECOMMENDED arming
+   path is that repo's dashboard pairing desk ("Pair cards" page,
+   session login, one click — TASK-006); curl + PAT stays the
+   automation alternative.
 2. OPERATION MODE — normal use: tap a paired card, log a presence event
    (calls POST /api/v1/events/tap).
 

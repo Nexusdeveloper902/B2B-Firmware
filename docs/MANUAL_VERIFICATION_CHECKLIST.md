@@ -92,9 +92,13 @@ mirror the LED patterns.
 
 ## 5. Pairing mode — successful pairing
 
-- [ ] 5.1 Arm a session from the backend host (admin token — full
-      walkthrough incl. how to mint the admin PAT:
-      [PAIRING.md](PAIRING.md) §Prerequisites):
+- [ ] 5.1 Arm a session for the student (admin decision on the backend).
+      Recommended — the dashboard pairing desk (B2B-Core TASK-011):
+      log in as admin → **Pair cards** nav page → **Arm pairing** on
+      the student's row (live countdown + success line on the page;
+      full walkthrough: [PAIRING.md](PAIRING.md) Prerequisites 4).
+      Automation alternative (curl + admin PAT — how to mint the PAT:
+      [PAIRING.md](PAIRING.md) Prerequisites 4):
       `curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing -H "Authorization: Bearer <admin-PAT>" -H "Accept: application/json"`
       → `{"status":"ok","student_id":<id>,"expires_at":"..."}` (45 s window).
 - [ ] 5.2 Within the window, tap a FRESH (never-paired) card UID.

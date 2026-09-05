@@ -25,10 +25,12 @@ Emparejar son **dos pasos, por diseño, en este orden**:
 
 ```text
 PASO 1 (backend, admin)               PASO 2 (dispositivo, cualquier operador)
-POST /api/v1/admin/students/{id}/     1. escribe la CLAVE DE MODO en el
-     arm-pairing                        Monitor Serial → modo EMPAREJAR
-  → abre una ventana de 45 s          2. acerca una tarjeta NUEVA dentro de ella
-                                        3. [OK] tarjeta emparejada con: <estudiante>
+Panel «Emparejar tarjetas» ->          1. escribe la CLAVE DE MODO en el
+clic «Armar emparejamiento» en el         Monitor Serial -> modo EMPAREJAR
+estudiante (o, para automatizar:       2. acerca una tarjeta NUEVA dentro de ella
+curl POST .../students/{id}/          3. [OK] tarjeta emparejada con: <estudiante>
+ arm-pairing con un PAT de admin)
+  -> abre una ventana de 45 s
 ```
 
 **Armar ocurre ANTES de acercar la tarjeta.** No existe forma de emparejar
@@ -192,16 +194,38 @@ Cómo leer la respuesta — cada código HTTP tiene exactamente un significado:
 - Flasheado y monitorizando: `pio run -e esp32dev -t upload && pio device
   monitor`. El banner de arranque termina en modo OPERATION.
 
-### 4. Un token de admin para armar
+### 4. Una forma de armar — página del panel (recomendada) o token de admin
 
-Armar exige `auth:sanctum` + `role:admin` — una **sesión** de admin
-(panel) o un **token de acceso personal** (PAT). Para acuñar un PAT en el
-host del backend:
+Armar exige una decisión de admin en el backend. Elige UNA:
+
+**Opción 1 — el escritorio de emparejamiento del panel (recomendada;
+B2B-Core TASK-011, cero preparación).** Inicia sesión en el panel como
+admin (demo: `admin@presence.test` / `password`), abre **Emparejar
+tarjetas** en la barra superior (`/admin/pairing`) y haz clic en **Armar
+emparejamiento** en la fila del estudiante. La página muestra la cuenta
+regresiva de 45 s en vivo, imprime la línea de éxito en el instante en
+que tu toque empareja la tarjeta y mantiene un historial de
+emparejamientos recientes — nunca tocas curl, tokens ni el monitor
+serial por el lado del armado. Esta es la forma normal de emparejar
+estudiantes.
+
+**Opción 2 — un token de admin (para scripts/automatización).** Armar
+exige `auth:sanctum` + `role:admin` — una cookie de sesión (el panel lo
+hace por ti en la Opción 1) o un **token de acceso personal** (PAT).
+Para acuñar un PAT en el host del backend:
 
 ```bash
 php artisan tinker
 >>> App\Models\User::where('email', 'admin@presence.test')
 ...     ->first()->createToken('pairing-arm')->plainTextToken;
+```
+
+Luego arma por estudiante:
+
+```bash
+curl -X POST http://<backend>/api/v1/admin/students/<id>/arm-pairing \
+     -H "Authorization: Bearer <PAT-de-admin>" \
+     -H "Accept: application/json"
 ```
 
 (Los admin pasan sin `403`; un token de teacher se rechaza con `403`, los
@@ -217,8 +241,12 @@ Paso a paso, con las líneas exactas que imprime el firmware (los builds de
 TASK-004 añaden líneas de guía tras cada estado; builds anteriores solo
 imprimen la primera línea):
 
-1. **Arma para el estudiante** (host del backend, dentro de los 45 s
-   previos al toque):
+1. **Arma para el estudiante** (dentro de los 45 s previos al toque).
+   Recomendado — el escritorio de emparejamiento del panel: inicia
+   sesión como admin, abre **Emparejar tarjetas**, haz clic en **Armar
+   emparejamiento** en la fila del estudiante; la página muestra la
+   cuenta regresiva e imprimirá por ti la línea de éxito. Alternativa de
+   automatización:
 
    ```bash
    curl -X POST http://192.168.1.6:8000/api/v1/admin/students/3/arm-pairing \
@@ -366,7 +394,9 @@ del servidor ([Opciones A/B/C](#prerrequisitos-hazlos-una-vez)).
 
 **¿Quién puede armar un emparejamiento?** Admins (sesión Sanctum o PAT).
 Un teacher se rechaza con `403`, un invitado con `401` — se aplica en el
-backend, no en este firmware.
+backend, no en este firmware. Desde B2B-Core TASK-011 la página
+**Emparejar tarjetas** del panel de admin es la forma de un clic (sin
+PAT); la forma con curl queda para scripts.
 
 **¿Por qué 45 segundos?** Suficiente para caminar del escritorio al lector
 y tocar; demasiado corto para dejar invitaciones abiertas. Es el
