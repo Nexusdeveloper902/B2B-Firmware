@@ -2,11 +2,11 @@
 
 > Also available in: [English](HARDWARE_SETUP.md)
 
-Este documento describe el cableado físico, los entornos de compilación y
-el procedimiento de flasheo del firmware del lector. **Confirma cada pin
-contra tu cableado real antes de confiar en él** — los valores por defecto
-asumen un ESP32 DevKit genérico (`esp32dev`) y pueden cambiarse en
-`include/config.h`.
+Este documento describe el cableado físico, los entornos de compilación,
+el procedimiento de flasheo y la consola serial de modo del firmware del
+lector. **Confirma cada pin contra tu cableado real antes de confiar en
+él** — los valores por defecto asumen un ESP32 DevKit genérico
+(`esp32dev`) y pueden cambiarse en `include/config.h`.
 
 ## Lista de materiales
 
@@ -17,9 +17,13 @@ asumen un ESP32 DevKit genérico (`esp32dev`) y pueden cambiarse en
 | LED 1 — "MODO" | indica el modo de operación, de forma continua |
 | LED 2 — "EVENTO" | reproduce los patrones de resultado de toque/emparejar |
 | (opcional) zumbador pasivo | solo pitido de éxito |
-| Botón momentáneo | a GND — mantenlo al alimentar para entrar en modo EMPAREJAR |
 | 2 × resistencias (220–470 Ω) | resistencias en serie de los LEDs |
 | Protoboard + cables | |
+
+> El BOTÓN de modo ya no forma parte de la lista: desde TASK-003 el
+cambio de modo se hace por el Monitor Serial (contraseña) y no se cablea
+ningún botón. El GPIO 32 queda libre. / The mode button is gone from the
+BOM since TASK-003; GPIO 32 is free.
 
 ## Tabla de cableado
 
@@ -50,22 +54,39 @@ aliméntalo desde el pin 3V3 del ESP32, nunca desde 5 V/VIN.
 > 0x90/0x88 = algunos clones). Esa línea es la confirmación positiva de
 > que la radio está viva.
 
-### Botón de selección de modo
+### Cambio de modo — contraseña en el Monitor Serial (TASK-003)
 
-| Conexión | constante en config.h | Significado |
+No requiere cableado. El equipo arranca en MODO OPERACIÓN; escribe la
+contraseña de modo + Enter en el Monitor Serial (115200 baudios) para
+alternar OPERACIÓN <-> EMPAREJAR en cualquier momento. El VALOR de la
+contraseña vive en el gitignored `include/secrets.h` (`MODE_PASSWORD` —
+ver `secrets.h.example`); los parámetros viven en `config.h`:
+
+| Constante | Por defecto | Significado |
 |---|---|---|
-| GPIO **32** ↔ botón ↔ GND | `PIN_MODE_SELECT` | `INPUT_PULLUP` activado |
+| `MODE_CONSOLE_MAX_WRONG_ATTEMPTS` | 3 | contraseñas erróneas antes del bloqueo |
+| `MODE_CONSOLE_LOCKOUT_MS` | 10000 | duración del bloqueo |
+| `SERIAL_LINE_MAX_LENGTH` | 64 | límite de longitud de línea (se descarta si excede) |
 
-Nivel lógico al arrancar (tras 50 ms de asentamiento / doble lectura):
+Conducta de la consola:
 
-| Nivel del pin al arrancar | Modo seleccionado |
-|---|---|
-| HIGH (botón sin pulsar) | **MODO OPERACIÓN** (toques normales) |
-| LOW (botón pulsado al alimentar/pulsar EN/RESET) | **MODO EMPAREJAR** (emparejar tarjeta nueva) |
-
-El modo queda fijo durante la sesión; para cambiarlo, mantén el botón y
-pulsa EN/RESET. El LED de MODO siempre muestra el modo activo (ver tabla de
-patrones), así que nunca tienes que adivinar.
+- Los caracteres tecleados se muestran como `*` (enmascarados: la
+  contraseña nunca aparece en pantalla) y el registro nunca imprime la
+  contraseña esperada.
+- Contraseña correcta → `[MODE] switched to / cambiado a: ...` + 2
+  parpadeos lentos del LED de EVENTO + el LED de MODO muestra de
+  inmediato el patrón de reposo del nuevo modo.
+- Contraseña errónea → `[MODE] wrong password / clave incorrecta — N
+  intento(s) restante(s)` + 2 parpadeos muy rápidos. Tras 3 errores la
+  consola se bloquea 10 s (`[MODE] input locked ...`), incluso para la
+  contraseña correcta, y luego se restablece.
+- Build con lector real: toda línea no vacía es un intento de contraseña.
+- Build simulado: una línea que no es la contraseña es un toque virtual
+  (UID), así que el bloqueo nunca se dispara al teclear UIDs normales.
+- Honestidad de seguridad: el Monitor Serial es un canal de acceso físico
+  (USB) — la contraseña es una compuerta de operador, no criptografía.
+  Emparejar sigue requiriendo una sesión armada por un admin en el
+  backend (ventana de 45 s) + la clave Bearer del lector.
 
 ### Salidas de retroalimentación
 
@@ -95,11 +116,13 @@ tarjeta (y luego queda apagado).
 | Tarjeta ya emparejada (422) | EVENTO | 4 destellos |
 | Fallo de red | EVENTO | 5 destellos rápidos (120 ms) |
 | Fallo de autenticación (401, clave errónea) | EVENTO | 6 destellos rápidos (120 ms) |
+| Modo cambiado (contraseña correcta) | EVENTO | 2 destellos lentos (500 ms encendido / 250 ms apagado) |
+| Contraseña de modo errónea | EVENTO | 2 destellos muy rápidos (80 ms) |
 | Respuesta inesperada del servidor | EVENTO | sólido largo 2 s |
 
 El monitor serial imprime una línea bilingüe por cada evento (prefijos
 `[NFC]` / `[OK]` / `[404]` / `[409]` / `[422]` / `[401]` / `[NET]` /
-`[ERR]`), de modo que patrones y registro se confirman mutuamente.
+`[MODE]` / `[ERR]`), de modo que patrones y registro se confirman mutuamente.
 
 ## Entornos de compilación
 
@@ -112,7 +135,7 @@ El monitor serial imprime una línea bilingüe por cada evento (prefijos
 ## Flasheo
 
 ```bash
-cp include/secrets.h.example include/secrets.h   # luego edita: Wi-Fi, URL del backend, clave del lector
+cp include/secrets.h.example include/secrets.h   # luego edita: Wi-Fi, URL del backend, clave del lector, MODE_PASSWORD
 pio run -e esp32dev -t upload                     # lector real (entorno por defecto desde TASK-002)
 #   equivalente a: pio run -t upload
 pio run -e esp32dev-mock -t upload                # lector simulado (opcional)
@@ -135,7 +158,10 @@ lector real:
 
 ```text
 Reader impl / Implementacion: RC522 (SPI)
+Mode / Modo: OPERATION / OPERACION
 [NFC] RC522 detected — firmware version 0x92 / detectado
+---- type the MODE PASSWORD + Enter to switch modes / escribe la
+     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----
 ---- present a card to the reader / presenta una tarjeta al lector ----
 ```
 
@@ -157,7 +183,9 @@ El build simulado en cambio imprime `---- type a UID + Enter ... ----`.
 | `HTTP_TIMEOUT_MS` | 10000 | tiempo de espera HTTP por petición |
 | `CARD_COOLDOWN_MS` | 2000 | ventana de antirrebote de relectura del mismo UID |
 | `RC522_REINIT_INTERVAL_MS` | 5000 | cadencia de reintento de init del RC522 mientras no responde (auto-recuperación) |
-| `MODE_BUTTON_SETTLE_MS` | 50 | antirrebote del botón al arrancar |
+| `MODE_CONSOLE_MAX_WRONG_ATTEMPTS` | 3 | contraseñas de modo erróneas antes del bloqueo |
+| `MODE_CONSOLE_LOCKOUT_MS` | 10000 | duración del bloqueo de la consola de modo |
+| `SERIAL_LINE_MAX_LENGTH` | 64 | límite de longitud de línea serial (se descarta si excede) |
 
 Todo el tiempo del bucle se basa en `millis()` y es no bloqueante; no hay
 ningún `delay()` en `loop()`.

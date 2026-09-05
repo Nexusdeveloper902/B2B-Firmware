@@ -40,10 +40,21 @@
 #include "secrets.h.example"
 #endif
 
+// TASK-003: a secrets.h written before the mode-console era has no
+// MODE_PASSWORD — keep it compiling (insecure default + bilingual
+// #warning) instead of breaking the user's local file after a pull.
+// / TASK-003: un secrets.h anterior a la consola de modo no tiene
+// MODE_PASSWORD — sigue compilando (valor inseguro + #warning bilingüe).
+#ifndef MODE_PASSWORD
+#warning "MODE_PASSWORD not defined — using insecure default; add it to include/secrets.h. / MODE_PASSWORD no definido — valor por defecto inseguro; añádelo a include/secrets.h."
+#define MODE_PASSWORD "CHANGE-ME-MODE-PW"
+#endif
+
 #include "CoreTypes.h"
 #include "FeedbackController.h"
 #include "Mode.h"
 #include "Modes.h"
+#include "ModeConsole.h"
 #include "NfcReader.h"
 #include "ResponseParser.h"
 #include "CardDebouncer.h"
@@ -71,34 +82,28 @@ static EspApiClient api(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS);
 static LedFeedbackController feedback(PIN_LED_MODE, PIN_LED_EVENT, PIN_BUZZER);
 static CardDebouncer debouncer(CARD_COOLDOWN_MS);
 
+// TASK-003: the serial console that gates mode switching. Password value
+// from secrets.h; knobs (max wrong attempts, lockout) from config.h.
+static ModeConsole modeConsole(MODE_PASSWORD,
+                                MODE_CONSOLE_MAX_WRONG_ATTEMPTS,
+                                MODE_CONSOLE_LOCKOUT_MS);
+static LineBuffer serialInput(SERIAL_LINE_MAX_LENGTH);
+
 #if defined(PRESENCE_READER_IMPL_RC522)
 static Rc522NfcReader reader(PIN_RC522_SS, PIN_RC522_RST,
                              PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI,
                              &Serial);  // Serial = diagnostics sink
 #elif defined(PRESENCE_READER_IMPL_MOCK)
-static MockSerialNfcReader reader(Serial);
+static MockSerialNfcReader reader;
 #endif
 
 static OperationMode operationMode;
 static PairingMode pairingMode;
-static Mode* mode = nullptr;  // selected at boot from the mode-select pin
+static Mode* mode = nullptr;  // boots OPERATION; toggled by the console password
 
 // ---------------------------------------------------------------------------
 // Boot / Arranque
 // ---------------------------------------------------------------------------
-static Mode* selectModeFromPin() {
-    // Debounced boot-time read of the mode-select button (pin + polarity
-    // documented in config.h and docs/HARDWARE_SETUP.md).
-    int first = digitalRead(PIN_MODE_SELECT);
-    delay(MODE_BUTTON_SETTLE_MS);
-    int second = digitalRead(PIN_MODE_SELECT);
-
-    const int level = (first == second) ? first
-                                        : (digitalRead(PIN_MODE_SELECT) ? HIGH : LOW);
-    return (level == MODE_LEVEL_PAIRING) ? static_cast<Mode*>(&pairingMode)
-                                         : static_cast<Mode*>(&operationMode);
-}
-
 static void printBanner() {
     Serial.println();
     Serial.println("==============================================");
@@ -106,10 +111,12 @@ static void printBanner() {
     Serial.println("==============================================");
     Serial.print("Reader impl / Implementacion: ");
     Serial.println(reader.label());
-    Serial.print("Mode (button at boot) / Modo (boton al arrancar): ");
+    Serial.print("Mode / Modo: ");
     Serial.println(mode->label());
     Serial.print("Backend: ");
     Serial.println(API_BASE_URL);
+    Serial.println("---- type the MODE PASSWORD + Enter to switch modes / escribe la");
+    Serial.println("     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----");
 #if defined(PRESENCE_READER_IMPL_RC522)
     Serial.println("---- present a card to the reader / presenta una tarjeta al lector ----");
 #elif defined(PRESENCE_READER_IMPL_MOCK)
@@ -128,8 +135,10 @@ void setup() {
     feedback.begin();
     feedback.indicate(FeedbackKind::BootConnecting);
 
-    pinMode(PIN_MODE_SELECT, INPUT_PULLUP);
-    mode = selectModeFromPin();
+    // TASK-003: mode no longer comes from a boot pin — the device boots in
+    // OPERATION and the operator toggles it anytime with the console
+    // password (ADR-005; the mode button is gone).
+    mode = &operationMode;
 
     if (!reader.begin()) {
         // RC522 init failed — the driver already printed the probed
@@ -160,6 +169,103 @@ void setup() {
     feedback.indicate(mode->kind() == ModeKind::Pairing ? FeedbackKind::IdlePairing
                                                         : FeedbackKind::IdleOperation);
     debouncer.reset();
+}
+
+// ---------------------------------------------------------------------------
+// Mode switching (TASK-003) — serial console password / Contraseña por
+// consola serial
+// ---------------------------------------------------------------------------
+static void showModeEvent(FeedbackKind kind) {
+    FeedbackSignal signal;  // C++11: no brace-init with member defaults
+    signal.kind = kind;
+    feedback.showEvent(signal);
+}
+
+static void switchMode() {
+    mode = (mode->kind() == ModeKind::Pairing) ? static_cast<Mode*>(&operationMode)
+                                               : static_cast<Mode*>(&pairingMode);
+    Serial.println();
+    Serial.print("[MODE] switched to / cambiado a: ");
+    Serial.println(mode->label());
+
+    // EVENT LED: operator acknowledgment; MODE LED: the new idle pattern
+    // (the continuous mode indication is the source of truth on the bench).
+    showModeEvent(FeedbackKind::ModeSwitched);
+    feedback.indicate(mode->kind() == ModeKind::Pairing ? FeedbackKind::IdlePairing
+                                                        : FeedbackKind::IdleOperation);
+    debouncer.reset();  // a tap in flight must not straddle the switch
+}
+
+static void dispatchConsoleLine(const std::string& line, uint32_t now) {
+    if (line.empty()) {
+        return;  // bare Enter / discarded overflow line — nothing to do
+    }
+
+#if defined(PRESENCE_READER_IMPL_MOCK)
+    // Mock build: Serial carries BOTH console lines and virtual taps.
+    // The password gets the console treatment; anything else is a card
+    // UID (the documented dev workflow). Wrong "passwords" here are
+    // almost always UIDs, so the lockout is not armed in this build.
+    // / Build simulado: lo que no es la contraseña es un UID virtual.
+    if (modeConsole.matches(line)) {
+        modeConsole.handleLine(line, now);  // -> Accepted (matches)
+        switchMode();
+    } else {
+        reader.pushLine(line);  // virtual card tap
+    }
+#else
+    // Real-reader build: the console owns the whole terminal — every
+    // non-empty line is a password attempt (with lockout after the
+    // configured wrongs).
+    // / Build con lector real: toda línea no vacía es un intento de clave.
+    const ConsoleResult result = modeConsole.handleLine(line, now);
+    switch (result) {
+        case ConsoleResult::Accepted:
+            switchMode();
+            break;
+        case ConsoleResult::Rejected:
+            Serial.println();
+            Serial.print("[MODE] wrong password / clave incorrecta — ");
+            if (modeConsole.lockedOut(now)) {
+                Serial.print("input locked for ");
+                Serial.print(MODE_CONSOLE_LOCKOUT_MS / 1000);
+                Serial.println(" s / entrada bloqueada");
+            } else {
+                Serial.print(MODE_CONSOLE_MAX_WRONG_ATTEMPTS - modeConsole.wrongAttempts());
+                Serial.println(" attempt(s) left / intento(s) restante(s)");
+            }
+            showModeEvent(FeedbackKind::ModeRejected);
+            break;
+        case ConsoleResult::LockedOut:
+            Serial.println();
+            Serial.println("[MODE] input locked — wait for the countdown /");
+            Serial.println("     entrada bloqueada — espera la cuenta atras");
+            showModeEvent(FeedbackKind::ModeRejected);
+            break;
+        case ConsoleResult::Ignored:
+        default:
+            break;
+    }
+#endif
+}
+
+/** Non-blocking Serial reader: chars → masked echo → lines → dispatch. */
+static void pollConsole(uint32_t now) {
+    while (Serial.available() > 0) {
+        const char c = static_cast<char>(Serial.read());
+        if (c != '\n' && c != '\r') {
+            Serial.print('*');  // masked echo: never print what was typed
+        }
+        std::string line;
+        if (serialInput.feed(c, line)) {
+            Serial.println();  // end the asterisk row on Enter
+            if (serialInput.overflowed()) {
+                Serial.println("[MODE] input too long — line discarded /");
+                Serial.println("     entrada demasiado larga — linea descartada");
+            }
+            dispatchConsoleLine(line, now);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -249,6 +355,7 @@ void loop() {
 
     wifi.tick(now);
     feedback.tick(now);
+    pollConsole(now);  // TASK-003: serial input → console dispatch
 
     std::string uid;
     if (reader.poll(uid)) {

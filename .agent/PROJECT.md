@@ -26,8 +26,11 @@ regardless. A serial mock reader exists for development without hardware.
 2. OPERATION MODE — normal use: tap a paired card, log a presence event
    (calls POST /api/v1/events/tap).
 
-Mode is selected at boot by the mode-select button pin state and shown
-continuously on the mode LED.
+Mode switching (TASK-003): the device boots in OPERATION and the operator
+toggles OPERATION <-> PAIRING at any time by typing the mode password
+(MODE_PASSWORD, secrets.h) in the Serial Monitor; the current mode shows
+continuously on the mode LED. The boot-time mode button is gone (ADR-005,
+superseding ADR-002).
 
 ## Explicit non-goals (for now)
 - No camera / recycling-classification flow.

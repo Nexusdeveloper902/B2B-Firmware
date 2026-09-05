@@ -13,12 +13,17 @@ en B2B-Core como `TASK-010` específicamente para desbloquear este firmware.
 
 ## Qué hace
 
-Dos modos de operación, seleccionados con un botón mantenido al arrancar:
+Dos modos de operación. El equipo arranca en **Operación**; el operador
+pasa a Emparejar y vuelve en cualquier momento escribiendo la **clave de
+modo** (guardada en el gitignored `secrets.h`) + Enter en el Monitor
+Serial:
 
 | Modo | Comportamiento |
 |---|---|
-| **Operación** (por defecto) | Tocar una tarjeta emparejada → `POST /api/v1/events/tap` → evento de presencia + retroalimentación |
+| **Operación** (al arrancar) | Tocar una tarjeta emparejada → `POST /api/v1/events/tap` → evento de presencia + retroalimentación |
 | **Emparejar** | Tocar una tarjeta nueva → `POST /api/v1/admin/cards/pair` → tarjeta vinculada al estudiante armado |
+
+- **Cambio de modo**: contraseña por consola serial (`MODE_PASSWORD` en secrets.h) alterna OPERACIÓN <-> EMPAREJAR en ejecución — 2 parpadeos lentos del LED de EVENTO confirman el cambio; 3 contraseñas erróneas bloquean la consola 10 s (configurable). Los caracteres tecleados se muestran como `*`.
 
 - **NFC**: RC522 por SPI — build por defecto desde TASK-002 (`pio run -t upload` flashea el lector real). El lector simulado por Serial sigue disponible como entorno opcional de desarrollo (`-e esp32dev-mock`).
 - **Identidad**: clave Bearer estática `READER_API_KEY` — la clave ES la identidad del lector.
@@ -28,7 +33,7 @@ Dos modos de operación, seleccionados con un botón mantenido al arrancar:
 ## Requisitos
 
 - [PlatformIO](https://platformio.org/) (`pip install platformio`)
-- Una placa de desarrollo ESP32 (se asume `esp32dev` genérica) + módulo RC522 + LEDs/botón (ver [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md))
+- Una placa de desarrollo ESP32 (se asume `esp32dev` genérica) + módulo RC522 + LEDs (ver [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md)); un equipo con el Monitor Serial para el cambio de modo
 - Un backend [B2B-Core](https://github.com/Nexusdeveloper902/B2B-Core) en ejecución (`./run setup && ./run serve`) y el `api_key` del lector que imprime su seeder
 
 ## Inicio rápido
@@ -36,7 +41,7 @@ Dos modos de operación, seleccionados con un botón mantenido al arrancar:
 ```bash
 # 1. secretos (nunca se suben al repositorio)
 cp include/secrets.h.example include/secrets.h
-$EDITOR include/secrets.h      # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY
+$EDITOR include/secrets.h      # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY, MODE_PASSWORD
 
 # 2. compilar (lector real RC522 — entorno POR DEFECTO desde TASK-002)
 #    cableado: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.es.md)
@@ -95,7 +100,7 @@ platformio.ini            entornos de build: esp32dev (por defecto: RC522 real) 
 include/config.h          pines + tiempos (confírmalos contra tu cableado)
 include/secrets.h.example plantilla de credenciales (secrets.h está ignorado por git)
 src/main.cpp              raíz de composición delgada (solo cableado)
-lib/PresenceCore/         C++ puro: payloads, parsers, modos, antirrebote, patrones
+lib/PresenceCore/         C++ puro: payloads, parsers, modos, antirrebote, patrones, consola serial
 lib/NfcReader/            interfaz NfcReader + RC522 + simulador serial
 lib/Feedback/             interfaz FeedbackController + implementación LED
 lib/ApiClient/            interfaz ApiClient + transporte HTTPClient ESP32
@@ -112,8 +117,8 @@ La mayor parte del desarrollo ocurre sin la placa conectada. Lo que se
 verifica aquí: compilación para `esp32dev`, pruebas unitarias en el host
 de toda la lógica independiente del hardware, y comportamiento del lector
 simulado. Lo que requiere una persona en el banco: lecturas RC522 reales,
-asociación Wi-Fi real, comportamiento de LEDs/botón — guiado paso a paso
-por
+asociación Wi-Fi real, comportamiento de LEDs, tecleo en la consola
+serial — guiado paso a paso por
 [docs/MANUAL_VERIFICATION_CHECKLIST.es.md](docs/MANUAL_VERIFICATION_CHECKLIST.es.md).
 
 ## Seguridad

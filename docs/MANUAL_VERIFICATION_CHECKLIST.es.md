@@ -3,7 +3,8 @@
 > Also available in: [English](MANUAL_VERIFICATION_CHECKLIST.md)
 
 Este es el **protocolo de banco humano** para el firmware del lector. Todo
-lo que hay aquí requiere el ESP32 físico + RC522 + LEDs/botón y un backend
+lo que hay aquí requiere el ESP32 físico + RC522 + LEDs, un equipo
+conectado al Monitor Serial (el cambio de modo lo necesita) y un backend
 B2B-Core en ejecución. Las ejecuciones de agentes no pueden verificar el
 comportamiento de hardware (la compilación y las pruebas de lógica en el
 host se verifican aparte — ver `.agent/RUNS/`).
@@ -28,9 +29,9 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 
 ## 1. Arranque en modo OPERACIÓN + indicación de reposo
 
-- [ ] 1.1 Placa alimentada con el botón de modo SIN pulsar → el banner
-      serial muestra `Mode (button at boot) / Modo (boton al arrancar):
-      OPERATION / OPERACION`.
+- [ ] 1.1 Placa alimentada → el banner serial muestra
+      `Mode / Modo: OPERATION / OPERACION` (valor al arrancar; el botón
+      de modo desapareció en TASK-003).
 - [ ] 1.2 El LED de MODO muestra el patrón de reposo de operación: un
       destello corto cada ~2 s (latido simple).
 - [ ] 1.3 El serial muestra `[WiFi] connected / conectado — IP: <ip>`.
@@ -68,16 +69,25 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
       evento (antirrebote); retírala y vuelve a tocar tras >2 s → un
       segundo evento.
 
-## 4. Arranque en modo EMPAREJAR + indicación de reposo distinta
+## 4. Cambio a modo EMPAREJAR (contraseña serial) + indicación de reposo distinta
 
-- [ ] 4.1 Mantén el botón de modo mientras pulsas EN/RESET → el banner
-      muestra `PAIRING / EMPAREJAR`.
+- [ ] 4.1 En el Monitor Serial, escribe la contraseña de modo
+      (`MODE_PASSWORD` de secrets.h) + Enter → el serial muestra
+      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, los
+      caracteres tecleados aparecen como `*` y el LED de EVENTO hace
+      2 destellos lentos.
 - [ ] 4.2 El LED de MODO muestra el patrón de reposo de emparejamiento:
       dos destellos cortos cada ~2 s (claramente distinto del modo
       operación).
 - [ ] 4.3 Toca una tarjeta emparejada SIN sesión de emparejamiento armada
       → 3 destellos + serial `[409] No pairing session active / No hay
       ninguna sesion...`.
+- [ ] 4.4 Escribe una contraseña ERRÓNEA tres veces → tras la tercera, el
+      serial muestra `[MODE] input locked ...` y hasta la contraseña
+      correcta se rechaza; espera 10 s → la contraseña correcta vuelve a
+      funcionar.
+- [ ] 4.5 Escribe de nuevo la contraseña de modo al terminar → el modo
+      vuelve a OPERACIÓN (`[MODE] switched to ... OPERATION / OPERACION`).
 
 ## 5. Modo emparejar — emparejamiento exitoso
 

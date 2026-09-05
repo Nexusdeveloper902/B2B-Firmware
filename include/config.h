@@ -36,14 +36,17 @@
 #define RC522_REINIT_INTERVAL_MS  5000
 
 // ---------------------------------------------------------------------------
-// Mode-select button (read once at boot) / Botón de selección de modo
+// Mode switching — serial console password (TASK-003; ADR-005 supersedes
+// the boot-time mode button of ADR-002) / Cambio de modo — contraseña por
+// consola serial (TASK-003; ADR-005 sustituye el botón de arranque)
 // ---------------------------------------------------------------------------
-// Wired to GND through a momentary button; internal pull-up enabled.
-//   Pin state at boot      → Mode / Estado del pin al arrancar → Modo
-//   HIGH (button released) → OPERATION MODE  (normal taps)
-//   LOW  (button pressed)  → PAIRING MODE    (pair a new card)
-#define PIN_MODE_SELECT      32  // GPIO used, INPUT_PULLUP — confirm wiring
-#define MODE_LEVEL_PAIRING   LOW // logic level that selects PAIRING at boot
+// The MODE PASSWORD VALUE lives in the gitignored include/secrets.h
+// (MODE_PASSWORD — see secrets.h.example). These are the tunable knobs:
+// / El VALOR de la clave vive en el gitignored include/secrets.h
+// (MODE_PASSWORD — ver secrets.h.example). Estos son los parámetros:
+#define MODE_CONSOLE_MAX_WRONG_ATTEMPTS  3     // wrong passwords before lockout
+#define MODE_CONSOLE_LOCKOUT_MS           10000 // console lock after the wrongs
+#define SERIAL_LINE_MAX_LENGTH            64    // serial input line cap (chars)
 
 // ---------------------------------------------------------------------------
 // Feedback hardware / Hardware de retroalimentación
@@ -62,5 +65,4 @@
 #define WIFI_RECONNECT_INTERVAL_MS     10000  // retry cadence after a drop
 #define HTTP_TIMEOUT_MS                10000  // per-request HTTP timeout
 #define CARD_COOLDOWN_MS               2000   // same-UID re-read debounce
-#define MODE_BUTTON_SETTLE_MS          50     // boot-time debounce of button
 #define BOOT_SERIAL_WAIT_MS            2500   // wait for Serial Monitor attach

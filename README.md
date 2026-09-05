@@ -13,12 +13,16 @@ unblock this firmware.
 
 ## What it does
 
-Two operating modes, selected by a button held at boot:
+Two operating modes. The device boots in **Operation**; the operator
+toggles to Pairing and back at any time by typing the **mode password**
+(stored in the gitignored `secrets.h`) + Enter in the Serial Monitor:
 
 | Mode | Behavior |
 |---|---|
-| **Operation** (default) | Tap a paired card → `POST /api/v1/events/tap` → presence event + feedback |
+| **Operation** (boot default) | Tap a paired card → `POST /api/v1/events/tap` → presence event + feedback |
 | **Pairing** | Tap a fresh card → `POST /api/v1/admin/cards/pair` → card linked to the armed student |
+
+- **Mode switching**: serial-console password (`MODE_PASSWORD` in secrets.h) toggles OPERATION <-> PAIRING at runtime — 2 slow EVENT-LED blinks confirm the switch; 3 wrong passwords lock the console for 10 s (configurable). Typed characters echo as `*`.
 
 - **NFC**: RC522 over SPI — the default build since TASK-002 (`pio run -t upload` flashes the real reader). A serial mock reader remains available as an opt-in dev env (`-e esp32dev-mock`).
 - **Identity**: static Bearer `READER_API_KEY` — the key IS the reader identity.
@@ -28,7 +32,7 @@ Two operating modes, selected by a button held at boot:
 ## Requirements
 
 - [PlatformIO](https://platformio.org/) (`pip install platformio`)
-- An ESP32 dev board (generic `esp32dev` assumed) + RC522 module + LEDs/button (see [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md))
+- An ESP32 dev board (generic `esp32dev` assumed) + RC522 module + LEDs (see [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md)); a computer with the Serial Monitor for mode switching
 - A running [B2B-Core](https://github.com/Nexusdeveloper902/B2B-Core) backend (`./run setup && ./run serve`) and the reader `api_key` its seeder prints
 
 ## Quick start
@@ -36,7 +40,7 @@ Two operating modes, selected by a button held at boot:
 ```bash
 # 1. secrets (never committed)
 cp include/secrets.h.example include/secrets.h
-$EDITOR include/secrets.h          # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY
+$EDITOR include/secrets.h          # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY, MODE_PASSWORD
 
 # 2. compile (RC522 real reader — the DEFAULT env since TASK-002)
 #    wiring: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.md)
@@ -93,7 +97,7 @@ platformio.ini            build envs: esp32dev (default: real RC522) | esp32dev-
 include/config.h          pins + timing (confirm against your wiring)
 include/secrets.h.example credential template (secrets.h is gitignored)
 src/main.cpp              thin composition root (wiring only)
-lib/PresenceCore/         pure C++: payloads, parsers, modes, debounce, patterns
+lib/PresenceCore/         pure C++: payloads, parsers, modes, debounce, patterns, serial console
 lib/NfcReader/            NfcReader interface + RC522 + serial mock
 lib/Feedback/             FeedbackController interface + LED implementation
 lib/ApiClient/            ApiClient interface + ESP32 HTTPClient transport
@@ -109,8 +113,8 @@ docs/                     bilingual real documentation (EN/ES)
 Most development happens without the board attached. What is verified
 here: compilation for `esp32dev`, host unit tests of all
 hardware-independent logic, and mock-reader behavior. What requires a
-human at the bench: real RC522 reads, real Wi-Fi association, LED/button
-behavior — guided step by step by
+human at the bench: real RC522 reads, real Wi-Fi association, LED
+behavior, serial-console typing — guided step by step by
 [docs/MANUAL_VERIFICATION_CHECKLIST.md](docs/MANUAL_VERIFICATION_CHECKLIST.md).
 
 ## Security
