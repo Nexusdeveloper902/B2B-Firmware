@@ -108,6 +108,7 @@ void test_all_event_kinds_have_nonempty_patterns(void) {
         Presence::FeedbackKind::PairSuccess,     Presence::FeedbackKind::PairNoSession,
         Presence::FeedbackKind::PairAlreadyPaired, Presence::FeedbackKind::AuthError,
         Presence::FeedbackKind::NetworkError,    Presence::FeedbackKind::ServerError,
+        Presence::FeedbackKind::ModeSwitched,    Presence::FeedbackKind::ModeRejected,
     };
     for (Presence::FeedbackKind k : events) {
         TEST_ASSERT_TRUE(!Presence::eventLedPattern(k).empty());

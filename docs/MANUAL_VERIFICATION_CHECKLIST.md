@@ -3,8 +3,9 @@
 > También disponible en: [Español](MANUAL_VERIFICATION_CHECKLIST.es.md)
 
 This is the **human bench protocol** for the reader firmware. Everything
-here requires the physical ESP32 + RC522 + LEDs/button and a running
-B2B-Core backend. Agent runs cannot verify hardware behavior (compilation
+here requires the physical ESP32 + RC522 + LEDs, a computer attached to
+the Serial Monitor (mode switching needs it), and a running B2B-Core
+backend. Agent runs cannot verify hardware behavior (compilation
 and host-side logic tests are verified separately — see `.agent/RUNS/`).
 
 **Setup for every session:**
@@ -25,8 +26,9 @@ mirror the LED patterns.
 
 ## 1. Boot in OPERATION mode + idle indication
 
-- [ ] 1.1 Board powered with the mode button NOT pressed → serial banner
-      shows `Mode (button at boot) / Modo (boton al arrancar): OPERATION / OPERACION`.
+- [ ] 1.1 Board powered → serial banner shows
+      `Mode / Modo: OPERATION / OPERACION` (boot default; the mode button
+      is gone since TASK-003).
 - [ ] 1.2 MODE LED shows the operation idle pattern: one short blip every
       ~2 s (single heartbeat).
 - [ ] 1.3 Serial shows `[WiFi] connected / conectado — IP: <ip>`.
@@ -59,14 +61,21 @@ mirror the LED patterns.
 - [ ] 3.5 Rest the SAME card on the reader ~5 s → exactly ONE event
       (debounce); remove and re-tap after >2 s → a second event.
 
-## 4. Boot in PAIRING mode + distinct idle indication
+## 4. Switch to PAIRING mode (serial password) + distinct idle indication
 
-- [ ] 4.1 Hold the mode button while pressing EN/RESET → banner shows
-      `PAIRING / EMPAREJAR`.
+- [ ] 4.1 In the Serial Monitor, type the mode password (`MODE_PASSWORD`
+      from secrets.h) + Enter → serial shows
+      `[MODE] switched to / cambiado a: PAIRING / EMPAREJAR`, typed
+      characters appear as `*`, and the EVENT LED plays 2 slow blinks.
 - [ ] 4.2 MODE LED shows the pairing idle pattern: two short blips every
       ~2 s (clearly different from operation mode).
 - [ ] 4.3 Tap a paired card WITHOUT any pairing session armed → 3 blinks
       + serial `[409] No pairing session active / No hay ninguna sesion...`.
+- [ ] 4.4 Type a WRONG password three times → after the third, serial
+      shows `[MODE] input locked ... ` and even the correct password is
+      refused; wait 10 s → the correct password works again.
+- [ ] 4.5 Type the mode password again after testing → mode returns to
+      OPERATION (`[MODE] switched to ... OPERATION / OPERACION`).
 
 ## 5. Pairing mode — successful pairing
 

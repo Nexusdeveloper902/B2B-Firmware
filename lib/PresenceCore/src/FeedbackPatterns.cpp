@@ -54,6 +54,15 @@ std::vector<LedPhase> eventLedPattern(FeedbackKind kind) {
             // long solid — "backend answered, but wrong"
             return {{2000, true}};
 
+        case FeedbackKind::ModeSwitched:
+            // 2 slow blinks — operator action acknowledged; a clearly
+            // different tempo from the 200 ms rejection family
+            return {{500, true}, {250, false}, {500, true}, {250, false}};
+
+        case FeedbackKind::ModeRejected:
+            // 2 very fast blinks — wrong mode password (console)
+            return {{80, true}, {80, false}, {80, true}, {80, false}};
+
         default:
             // idle kinds never reach the event LED
             return {};

@@ -28,7 +28,8 @@ works identically, whether Postman, curl, a test, or this firmware.
 
 ## OPERATION MODE — POST /api/v1/events/tap
 
-Triggered by a card tap while the mode-select button was NOT held at boot.
+Triggered by a card tap while the device is in OPERATION mode (the boot
+default; switch modes with the serial-console password — TASK-003).
 
 **Request** (built by `Presence::buildTapPayload`):
 
@@ -63,7 +64,8 @@ malformed response).
 
 ## PAIRING MODE — POST /api/v1/admin/cards/pair
 
-Triggered by a card tap while the mode-select button WAS held at boot.
+Triggered by a card tap while the device is in PAIRING mode (entered by
+typing the serial-console mode password — TASK-003).
 The endpoint was built in B2B-Core as `TASK-010-card-pairing-endpoint`
 (two-step arm-then-pair design; arm window default 45 s — see B2B-Core
 ADR-020).

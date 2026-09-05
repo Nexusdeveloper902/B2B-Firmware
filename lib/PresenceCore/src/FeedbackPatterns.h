@@ -21,6 +21,8 @@
  *     network error    : 5x (120 ON / 120 OFF)
  *     auth error       : 6x (120 ON / 120 OFF)
  *     server error     : long 2000 ms ON
+ *     mode switched    : 2x (500 ON / 250 OFF) — operator ack (TASK-003)
+ *     mode rejected    : 2x (80 ON / 80 OFF) — wrong password (TASK-003)
  */
 #pragma once
 

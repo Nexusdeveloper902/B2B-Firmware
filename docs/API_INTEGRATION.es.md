@@ -31,8 +31,9 @@ firmware.
 
 ## MODO OPERACIÓN — POST /api/v1/events/tap
 
-Se dispara al tocar una tarjeta cuando el botón de modo NO se mantuvo al
-arrancar.
+Se dispara al tocar una tarjeta con el equipo en modo OPERACIÓN (el valor
+al arrancar; se cambia de modo con la contraseña de la consola serial —
+TASK-003).
 
 **Petición** (construida por `Presence::buildTapPayload`):
 
@@ -67,8 +68,8 @@ nunca se bloquea ante una respuesta malformada).
 
 ## MODO EMPAREJAR — POST /api/v1/admin/cards/pair
 
-Se dispara al tocar una tarjeta cuando el botón de modo SÍ se mantuvo al
-arrancar. El endpoint se construyó en B2B-Core como
+Se dispara al tocar una tarjeta con el equipo en modo EMPAREJAR (se entra
+escribiendo la contraseña de modo por la consola serial — TASK-003). El endpoint se construyó en B2B-Core como
 `TASK-010-card-pairing-endpoint` (diseño de dos pasos armar-y-emparejar;
 ventana por defecto 45 s — ver ADR-020 de B2B-Core).
 

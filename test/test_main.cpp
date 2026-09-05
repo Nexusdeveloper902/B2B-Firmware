@@ -14,6 +14,7 @@ void runPayloadTests();
 void runResponseTests();
 void runModeTests();
 void runDebounceTests();
+void runConsoleTests();
 
 // Shared by every test (Unity calls these around each RUN_TEST).
 void setUp() {}
@@ -26,6 +27,7 @@ int main() {
     runResponseTests();   // response parsing: every documented case
     runModeTests();       // mode strategies + feedback mapping
     runDebounceTests();   // card debounce + LED patterns/players
+    runConsoleTests();    // TASK-003: serial console (LineBuffer + ModeConsole)
 
     return UNITY_END();
 }

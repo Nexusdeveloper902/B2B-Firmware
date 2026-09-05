@@ -1,7 +1,9 @@
 # ADR-002: Boot-time mode selection via a physical pin
 
 ## Status
-Accepted (2026-09-05, TASK-001 Phase C)
+Superseded by ADR-005 (2026-09-05, TASK-003): mode is now switched at
+runtime via the serial-console password; the boot-time pin/button is gone.
+Originally Accepted (2026-09-05, TASK-001 Phase C).
 
 ## Context
 The reader has exactly two operating modes (Operation, Pairing). The task

@@ -101,6 +101,9 @@ enum class FeedbackKind {
     PairSuccess,      // card paired to the student
     PairNoSession,    // 409 — no pairing session active
     PairAlreadyPaired,// 422 — card already linked
+    // operator console events / eventos de la consola del operador
+    ModeSwitched,     // correct mode password — mode toggled (TASK-003)
+    ModeRejected,     // wrong mode password (TASK-003)
     // cross-mode failures / fallos comunes
     AuthError,        // 401 — reader key rejected
     NetworkError,     // transport failure
