@@ -16,6 +16,15 @@ works identically, whether Postman, curl, a test, or this firmware.
 - **Auth**: `Authorization: Bearer <READER_API_KEY>`. The key IS the
   reader identity; the backend never trusts a client-supplied reader id.
   The key is printed by the B2B-Core DemoSeeder (`./run setup`).
+  TASK-007: the firmware builds this header **explicitly** — the literal
+  `Bearer ` prefix comes from `Presence::bearerAuthorizationValue()`
+  (PresenceCore, pinned by `test_auth.cpp`), and `EspApiClient` sends it
+  via `addHeader`. Never switch back to `HTTPClient::setAuthorization(key)`:
+  that method prefixes its **default authorization type `Basic`**, the
+  backend ignores `Authorization: Basic <key>` entirely, and every
+  real-hardware call answered 401 with a perfectly valid key before this
+  fix (curl verification never caught it — curl sends the header
+  verbatim).
 - **Content-Type**: `application/json` (the classify endpoint alone uses
   multipart — not used by this firmware; see "Out of scope").
 - **Localization**: error `message` text is localized by the backend via

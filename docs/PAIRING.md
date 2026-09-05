@@ -114,6 +114,16 @@ authenticates the device by looking up **exactly** the
 the key IS the reader identity. If no row matches (typo, invented key,
 re-created database), every call from this firmware returns `401`.
 
+> **First, be on TASK-007 or later.** Before 2026-09-05 (TASK-007) the
+> firmware itself sent the wrong scheme: the ESP32 `HTTPClient`
+> default prefixed the key with `Basic`, so the backend saw
+> `Authorization: Basic <key>`, ignored it, and answered `401` **even
+> with a perfectly valid, correctly copied key** — while the curl
+> verification below kept passing (curl sends the header verbatim).
+> `git pull` + rebuild + reflash makes the device send
+> `Authorization: Bearer <key>`. A `[401]` seen on current firmware now
+> genuinely means this checklist's provisioning problem.
+
 Pick **one** of these provisioning options:
 
 **Option A — use the seeder-printed key (recommended for the bench).**
@@ -328,8 +338,13 @@ one).
 
 ## Troubleshooting
 
-**`[401]` on every tap/pair** — the key is not provisioned server-side.
-Work [Prerequisites §2](#2-reader_api_key-registered-on-the-backend--the-401-checklist):
+**`[401]` on every tap/pair** — on firmware **older than TASK-007**
+(2026-09-05) this was a firmware bug: the device sent
+`Authorization: Basic <key>` (HTTPClient's default scheme) which the
+backend ignores — 401 even with a valid key. Update first
+(`git pull` → `pio run -e esp32dev -t upload`). On current firmware a
+persistent 401 means the key is not provisioned server-side. Work
+[Prerequisites §2](#2-reader_api_key-registered-on-the-backend--the-401-checklist):
 run the verification curl; if it 401s, fix the key (Option A or B) before
 re-flashing. Also confirm no stray whitespace/quotes in the `#define
 READER_API_KEY "..."` line — the value sent is the exact string between

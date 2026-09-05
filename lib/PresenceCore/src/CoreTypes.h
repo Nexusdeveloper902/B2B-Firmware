@@ -39,6 +39,30 @@ struct ApiCall {
     std::string jsonBody;  // serialized JSON request payload
 };
 
+// TASK-007: the full Authorization header VALUE for every request this
+// firmware makes: "Bearer " + the static reader key. That exact scheme is
+// the B2B-Core contract (ADR-002 there) — Laravel's bearerToken() only
+// reads "Authorization: Bearer <key>".
+// / TASK-007: el VALOR completo de la cabecera Authorization de toda
+// peticion de este firmware: "Bearer " + la clave estatica del lector.
+// Ese esquema exacto es el contrato de B2B-Core (su ADR-002).
+//
+// WHY it lives here as a helper: the ESP32 Arduino HTTPClient's
+// setAuthorization(key) prefixes the value with its DEFAULT
+// authorization type — "Basic" — producing "Authorization: Basic <key>".
+// Laravel ignores that header, so every real-hardware call answered 401
+// with a perfectly valid, correctly provisioned key (curl verification
+// never caught it: curl sends the header verbatim). The literal scheme
+// lives HERE, in host-testable code, so test_auth.cpp can pin it and a
+// regression cannot hide inside a transport-only header again.
+// / ¿Por que un helper aqui? setAuthorization(key) de HTTPClient prefija
+// "Basic" (su tipo por defecto) y Laravel lo ignora: todo el hardware
+// real recibia 401 con una clave valida. El esquema literal vive AQUI,
+// en codigo testeable en el host, para que test_auth.cpp lo fije.
+inline std::string bearerAuthorizationValue(const std::string& bearerKey) {
+    return "Bearer " + bearerKey;
+}
+
 // ---------------------------------------------------------------------------
 // Tap outcomes (operation mode) / Resultados de tap (modo operación)
 // ---------------------------------------------------------------------------

@@ -120,6 +120,17 @@ ES la identidad del lector. Si ninguna fila coincide (error de tipeo,
 clave inventada, base de datos recreada), toda llamada de este firmware
 devuelve `401`.
 
+> **Primero, estar en TASK-007 o posterior.** Antes del 2026-09-05
+> (TASK-007) el propio firmware enviaba el esquema equivocado: el valor
+> por defecto del `HTTPClient` del ESP32 prefijaba la clave con `Basic`,
+> el backend veía `Authorization: Basic <clave>`, la ignoraba y
+> respondía `401` **incluso con una clave válida y bien copiada** —
+> mientras el curl de verificación de abajo seguía pasando (curl envía
+> la cabecera tal cual). `git pull` + recompilar + reflashear hace que
+> el dispositivo envíe `Authorization: Bearer <clave>`. Un `[401]` en
+> firmware actual ya significa de verdad el problema de
+> provisionamiento de esta lista.
+
 Elige **una** de estas opciones de provisionamiento:
 
 **Opción A — usa la clave impresa por el seeder (recomendada en el banco).**
@@ -341,8 +352,13 @@ modo actual: reposo de emparejamiento = **dos** parpadeos cortos cada ~2 s
 
 ## Solución de problemas
 
-**`[401]` en cada toque/emparejamiento** — la clave no está provisionada
-del lado del servidor. Trabaja el [Prerrequisito §2](#2-reader_api_key-registrada-en-el-backend--la-lista-de-chequeo-del-401):
+**`[401]` en cada toque/emparejamiento** — en firmware **anterior a
+TASK-007** (2026-09-05) esto era un bug del firmware: el dispositivo
+enviaba `Authorization: Basic <clave>` (el esquema por defecto del
+HTTPClient), que el backend ignora — 401 incluso con una clave válida.
+Actualiza primero (`git pull` → `pio run -e esp32dev -t upload`). En
+firmware actual, un 401 persistente significa que la clave no está
+provisionada del lado del servidor. Trabaja el [Prerrequisito §2](#2-reader_api_key-registrada-en-el-backend--la-lista-de-chequeo-del-401):
 corre el curl de verificación; si da 401, corrige la clave (Opción A o B)
 antes de reflashear. Confirma también que no haya espacios ni comillas
 extra en la línea `#define READER_API_KEY "..."` — el valor enviado es la

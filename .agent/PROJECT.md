@@ -41,6 +41,17 @@ toggles OPERATION <-> PAIRING at any time by typing the mode password
 continuously on the mode LED. The boot-time mode button is gone (ADR-005,
 superseding ADR-002).
 
+## Device-to-backend auth (TASK-007 / ADR-007)
+Every request carries `Authorization: Bearer <READER_API_KEY>` — the
+value built by `Presence::bearerAuthorizationValue()` (PresenceCore,
+pinned by test_auth.cpp) and sent via `addHeader` in EspApiClient.
+`HTTPClient::setAuthorization(key)` is FORBIDDEN here: it prefixes the
+default type "Basic" and the backend ignores that header — until
+TASK-007 (2026-09-05) every real-hardware call answered 401 with a
+perfectly valid key, invisible to curl-based verification. A 401 on
+current firmware genuinely means the key has no readers row
+(PAIRING.md §2).
+
 ## Explicit non-goals (for now)
 - No camera / recycling-classification flow.
 - No remote reconfiguration of a reader's event-type "mode" from firmware.
