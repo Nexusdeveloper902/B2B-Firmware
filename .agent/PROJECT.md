@@ -76,3 +76,22 @@ checklist (docs/MANUAL_VERIFICATION_CHECKLIST.md + .es.md).
   unit tests of the hardware-independent logic.
 - Real credentials live only in the gitignored `include/secrets.h`
   (template: `include/secrets.h.example`).
+
+## TASK-008 additions (2026-09-07, RUN-2026-09-07-firmware-010)
+
+This repo now builds the recycling station's CAMERA half alongside the
+reader: `[env:esp32cam]` (AI-Thinker ESP32-CAM, OV3660) — the verified
+reference's camera init/capture/visualizer, plus the upload wiring to
+B2B-Core TASK-025's endpoints:
+
+- Serial: ENTER = capture + POST /recycling/capture (bottle-first);
+  `a <uid>` = POST /recycling/captures/{id}/associate (resolution);
+  `e <event_id>` = arm card-first classify; `c` = local capture.
+- The trigger is the CaptureTrigger seam (spec §37): ENTER today, IR
+  sensor tomorrow — swap at the interface only. No multi-fire (line
+  discipline + 2 s cooldown, host-tested).
+- Multipart bodies + Bearer value live in host-tested PresenceCore
+  (CapturePayload, CaptureTrigger, buildAssociatePayload); associate
+  rides EspApiClient (the TASK-007 Bearer lesson, one auth path).
+- Reader envs build src/main.cpp only (src filters); reader behavior is
+  byte-for-byte untouched. Bench script: docs/CAMERA_STATION.md (+.es).
