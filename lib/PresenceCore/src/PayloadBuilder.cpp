@@ -29,4 +29,17 @@ std::string buildPairPayload(const std::string& credentialUid) {
     return out;
 }
 
+std::string buildAssociatePayload(const std::string& credentialUid) {
+    // Same wire shape as pair (single credential_uid field), different
+    // endpoint and lifecycle — kept explicit rather than aliased so the
+    // two contracts can evolve independently.
+    JsonDocument doc;
+
+    doc["credential_uid"] = credentialUid;
+
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
 }  // namespace Presence

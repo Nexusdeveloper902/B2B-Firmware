@@ -16,6 +16,8 @@ void runModeTests();
 void runDebounceTests();
 void runConsoleTests();
 void runAuthTests();
+void runCaptureTriggerTests();
+void runCapturePayloadTests();
 
 // Shared by every test (Unity calls these around each RUN_TEST).
 void setUp() {}
@@ -30,6 +32,8 @@ int main() {
     runDebounceTests();   // card debounce + LED patterns/players
     runConsoleTests();    // TASK-003: serial console (LineBuffer + ModeConsole)
     runAuthTests();       // TASK-007: Authorization header VALUE (Bearer)
+    runCaptureTriggerTests();  // TASK-008: the capture trigger seam (line discipline + cooldown)
+    runCapturePayloadTests();  // TASK-008: multipart wire bytes + associate JSON
 
     return UNITY_END();
 }
