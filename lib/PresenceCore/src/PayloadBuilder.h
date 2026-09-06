@@ -18,4 +18,8 @@ std::string buildTapPayload(const std::string& credentialUid,
 /** POST /api/v1/admin/cards/pair body: {"credential_uid": "..."} */
 std::string buildPairPayload(const std::string& credentialUid);
 
+/** POST /api/v1/recycling/captures/{id}/associate body: {"credential_uid": "..."}
+ *  (TASK-008: the bottle-first resolution call — B2B-Core TASK-025.) */
+std::string buildAssociatePayload(const std::string& credentialUid);
+
 }  // namespace Presence

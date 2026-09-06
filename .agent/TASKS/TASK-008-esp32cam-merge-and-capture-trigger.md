@@ -53,3 +53,16 @@ Fulfill the owner's recycling spec §6/§7/§8/§37 for THIS repository:
 - IR sensor hardware integration (spec §2 postpones it).
 - DeepSeek/API logic (backend owns it — never in firmware).
 - Bottle-first association (backend — B2B-Core TASK-025).
+
+## Resolution (append 2026-09-07, RUN-2026-09-07-firmware-010)
+
+Status: COMPLETED — all acceptance criteria met, merged to main (commit
+cfdfa3c). Evidence: native 86/86 (68 + 18 new tests); pio run esp32dev
++ esp32dev-mock + esp32cam ALL SUCCESS; fresh checkout without secrets.h
+compiles (the __has_include guard covers the camera build — warning
+path exercised). Refinement over the original objective 4 wording (see
+ADR-008): the primary upload is the bottle-first POST /recycling/capture
+(landed in B2B-Core TASK-025 the same date — the camera needs no
+event_id); card-first classify is still wired via 'e <event_id>'. The
+documented bench script (docs/CAMERA_STATION.md + .es.md) is the
+owner's manual verification, per the repo's hardware-honesty convention.
