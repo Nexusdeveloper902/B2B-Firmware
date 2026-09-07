@@ -326,7 +326,8 @@ bool Station::captureHighResolution() {
         return false;
     }
 
-    Serial.printf("Captured: %ux%u / Capturado: %ux%u\n", fb->width, fb->height);
+    Serial.printf("Captured: %ux%u / Capturado: %ux%u\n", fb->width, fb->height,
+                  fb->width, fb->height);
 
     freeLatestCapture();
 
@@ -346,6 +347,7 @@ bool Station::captureHighResolution() {
     latestCaptureId_++;
 
     Serial.printf("Stored capture #%lu / Captura guardada #%lu\n",
+                  static_cast<unsigned long>(latestCaptureId_),
                   static_cast<unsigned long>(latestCaptureId_));
 
     esp_camera_fb_return(fb);
