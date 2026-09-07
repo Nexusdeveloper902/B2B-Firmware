@@ -25,7 +25,7 @@ toggles to Pairing and back at any time by typing the **mode password**
 - **Mode switching**: serial-console password (`MODE_PASSWORD` in secrets.h) toggles OPERATION <-> PAIRING at runtime — 2 slow EVENT-LED blinks confirm the switch; 3 wrong passwords lock the console for 10 s (configurable). Typed characters echo as `*`.
 - **The device teaches its own flow** (TASK-004): every mode switch prints a bilingual hint of what to do next, and 401/409/422/404 responses print remediation lines — e.g. the 401 points at the reader-key provisioning steps in [docs/PAIRING.md](docs/PAIRING.md).
 
-- **NFC**: RC522 over SPI — the default build since TASK-002 (`pio run -t upload` flashes the real reader). A serial mock reader remains available as an opt-in dev env (`-e esp32dev-mock`).
+- **NFC**: RC522 over SPI — the reader env `esp32dev` is OPT-IN since ADR-010: the repo's default env is the camera station (`esp32cam`), so a plain `pio run -t upload` flashes the station. Flash the reader with `pio run -e esp32dev` or `scripts/flash.sh --esp32`. A serial mock reader remains available as an opt-in dev env (`-e esp32dev-mock`).
 - **Identity**: static Bearer `READER_API_KEY` — the key IS the reader identity.
 - **Feedback**: continuous mode LED + event LED patterns + optional buzzer; every outcome (success / 404 / 409 / 422 / 401 / network failure) has a distinct pattern and a bilingual serial log.
 - **Resilience**: debounced reads, non-blocking `millis()` loop, bounded Wi-Fi connect with background reconnect, bounded HTTP timeouts — the device never hangs or crashes on failure.
@@ -33,7 +33,7 @@ toggles to Pairing and back at any time by typing the **mode password**
 ## Requirements
 
 - [PlatformIO](https://platformio.org/) (`pip install platformio`)
-- An ESP32 dev board (generic `esp32dev` assumed) + RC522 module + LEDs (see [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md)); a computer with the Serial Monitor for mode switching
+- An ESP32 dev board (generic `esp32dev` assumed) + RC522 module + LEDs for the READER (see [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md)); or an AI-Thinker ESP32-CAM for the camera STATION (the default env — see [docs/CAMERA_STATION.md](docs/CAMERA_STATION.md)); a computer with the Serial Monitor for mode switching
 - A running [B2B-Core](https://github.com/Nexusdeveloper902/B2B-Core) backend (`./run setup && ./run serve`) and the reader `api_key` its seeder prints
 
 ## Quick start
@@ -43,15 +43,16 @@ toggles to Pairing and back at any time by typing the **mode password**
 cp include/secrets.h.example include/secrets.h
 $EDITOR include/secrets.h          # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY, MODE_PASSWORD
 
-# 2. compile (RC522 real reader — the DEFAULT env since TASK-002)
+# 2. compile the reader (OPT-IN env since ADR-010 — the repo default is the
+#    camera station `esp32cam`; scripts/flash.sh is the per-board flasher)
 #    wiring: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.md)
-pio run
+pio run -e esp32dev
 
 # 3. host-side unit tests (no hardware needed)
 pio test -e native
 
-# 4. flash + monitor  (plain `pio run -t upload` flashes the real reader)
-pio run -e esp32dev -t upload && pio device monitor
+# 4. flash + monitor  (reader env is OPT-IN since ADR-010 — always pass `-e esp32dev`, or use `scripts/flash.sh --esp32`)
+pio run -e esp32dev -t upload && pio device monitor -e esp32dev
 ```
 
 On a healthy boot the monitor prints
@@ -86,7 +87,9 @@ firmware's own `ResponseParser` — 8/8 verdicts (tap + pairing, incl. 404 /
 
 | Doc | Contents |
 |---|---|
+| [docs/CAMERA_STATION.md](docs/CAMERA_STATION.md) | The ESP32-CAM recycling station (the DEFAULT env since ADR-010): wiring, provisioning, build/flash/monitor, capture + upload flow |
 | [docs/HARDWARE_SETUP.md](docs/HARDWARE_SETUP.md) | Wiring, pins, libraries, flashing, LED pattern table |
+| [docs/FLASHING.md](docs/FLASHING.md) | `scripts/flash.sh` — flash any board (station / reader / mock) from one command: flags, ports, monitor |
 | [docs/PAIRING.md](docs/PAIRING.md) | Pairing mode end to end: arm-then-pair flow, reader-key provisioning, every outcome + fix, FAQ, security |
 | [docs/API_INTEGRATION.md](docs/API_INTEGRATION.md) | The exact backend contract this firmware implements (both modes, all response cases) |
 | [docs/MANUAL_VERIFICATION_CHECKLIST.md](docs/MANUAL_VERIFICATION_CHECKLIST.md) | Bench checklist for a human with the real board |
@@ -95,7 +98,7 @@ firmware's own `ResponseParser` — 8/8 verdicts (tap + pairing, incl. 404 /
 ## Repository layout
 
 ```text
-platformio.ini            build envs: esp32dev (default: real RC522) | esp32dev-mock | native
+platformio.ini            build envs: esp32cam (default: camera station) | esp32dev (reader) | esp32dev-mock | native
 include/config.h          pins + timing (confirm against your wiring)
 include/secrets.h.example credential template (secrets.h is gitignored)
 src/main.cpp              thin composition root (wiring only)
@@ -107,6 +110,7 @@ lib/WifiService/          bounded connect + non-blocking reconnect
 test/                     host-side native unit tests (65)
 tools/e2e/                E2E harness: firmware payloads + parser vs real backend
 scripts/e2e_backend.sh    backend integration E2E (throwaway DB, real HTTP)
+scripts/flash.sh          per-board flash wrapper (station | reader | mock)
 docs/                     bilingual real documentation (EN/ES)
 ```
 

@@ -26,7 +26,7 @@ Serial:
 - **Cambio de modo**: contraseña por consola serial (`MODE_PASSWORD` en secrets.h) alterna OPERACIÓN <-> EMPAREJAR en ejecución — 2 parpadeos lentos del LED de EVENTO confirman el cambio; 3 contraseñas erróneas bloquean la consola 10 s (configurable). Los caracteres tecleados se muestran como `*`.
 - **El dispositivo enseña su propio flujo** (TASK-004): cada cambio de modo imprime una pista bilingüe de qué hacer a continuación, y las respuestas 401/409/422/404 añaden líneas de remediación — p. ej. el 401 señala los pasos de provisionamiento de la clave de lector en [docs/PAIRING.es.md](docs/PAIRING.es.md).
 
-- **NFC**: RC522 por SPI — build por defecto desde TASK-002 (`pio run -t upload` flashea el lector real). El lector simulado por Serial sigue disponible como entorno opcional de desarrollo (`-e esp32dev-mock`).
+- **NFC**: RC522 por SPI — el entorno de lector `esp32dev` es OPTATIVO desde ADR-010: el entorno por defecto del repositorio es la estación de cámara (`esp32cam`), así que un `pio run -t upload` simple flashea la estación. Flashea el lector con `pio run -e esp32dev` o `scripts/flash.sh --esp32`. El lector simulado por Serial sigue disponible como entorno opcional de desarrollo (`-e esp32dev-mock`).
 - **Identidad**: clave Bearer estática `READER_API_KEY` — la clave ES la identidad del lector.
 - **Retroalimentación**: LED de modo continuo + patrones del LED de eventos + zumbador opcional; cada resultado (éxito / 404 / 409 / 422 / 401 / fallo de red) tiene un patrón distinto y un registro serial bilingüe.
 - **Resiliencia**: lecturas con antirrebote, bucle no bloqueante basado en `millis()`, conexión Wi-Fi acotada con reconexión en segundo plano, tiempos de espera HTTP acotados — el dispositivo nunca se cuelga ni se reinicia por un fallo.
@@ -34,7 +34,7 @@ Serial:
 ## Requisitos
 
 - [PlatformIO](https://platformio.org/) (`pip install platformio`)
-- Una placa de desarrollo ESP32 (se asume `esp32dev` genérica) + módulo RC522 + LEDs (ver [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md)); un equipo con el Monitor Serial para el cambio de modo
+- Una placa de desarrollo ESP32 (se asume `esp32dev` genérica) + módulo RC522 + LEDs para el LECTOR (ver [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md)); o una AI-Thinker ESP32-CAM para la ESTACIÓN de cámara (el entorno por defecto — ver [docs/CAMERA_STATION.es.md](docs/CAMERA_STATION.es.md)); un equipo con el Monitor Serial para el cambio de modo
 - Un backend [B2B-Core](https://github.com/Nexusdeveloper902/B2B-Core) en ejecución (`./run setup && ./run serve`) y el `api_key` del lector que imprime su seeder
 
 ## Inicio rápido
@@ -44,15 +44,16 @@ Serial:
 cp include/secrets.h.example include/secrets.h
 $EDITOR include/secrets.h      # WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY, MODE_PASSWORD
 
-# 2. compilar (lector real RC522 — entorno POR DEFECTO desde TASK-002)
+# 2. compilar el lector (entorno OPTATIVO desde ADR-010 — el predeterminado del
+#    repo es la estación de cámara `esp32cam`; scripts/flash.sh es el flasheador por placa)
 #    cableado: SCK=18 MISO=19 MOSI=23 SDA/SS=5 RST=27 (docs/HARDWARE_SETUP.es.md)
-pio run
+pio run -e esp32dev
 
 # 3. pruebas unitarias en el host (sin hardware)
 pio test -e native
 
-# 4. flashear + monitor (un `pio run -t upload` simple flashea el lector real)
-pio run -e esp32dev -t upload && pio device monitor
+# 4. flashear + monitor (el entorno de lector es OPTATIVO desde ADR-010 — pasa siempre `-e esp32dev`, o usa `scripts/flash.sh --esp32`)
+pio run -e esp32dev -t upload && pio device monitor -e esp32dev
 ```
 
 En un arranque sano el monitor imprime
@@ -89,7 +90,9 @@ veredictos (tap + emparejar, incl. 404 / 409 / 422 / 401).
 
 | Documento | Contenido |
 |---|---|
+| [docs/CAMERA_STATION.es.md](docs/CAMERA_STATION.es.md) | La estación de reciclaje ESP32-CAM (el entorno POR DEFECTO desde ADR-010): cableado, provisionamiento, compilar/flashear/monitorear, flujo de captura + subida |
 | [docs/HARDWARE_SETUP.es.md](docs/HARDWARE_SETUP.es.md) | Cableado, pines, librerías, flasheo, tabla de patrones LED |
+| [docs/FLASHING.es.md](docs/FLASHING.es.md) | `scripts/flash.sh` — flashea cualquier placa (estación / lector / simulado) con un comando: banderas, puertos, monitor |
 | [docs/PAIRING.es.md](docs/PAIRING.es.md) | Modo de emparejamiento de punta a punta: flujo armar-antes-de-emparejar, provisionamiento de la clave de lector, cada resultado + arreglo, FAQ, seguridad |
 | [docs/API_INTEGRATION.es.md](docs/API_INTEGRATION.es.md) | El contrato exacto del backend que implementa este firmware (ambos modos, todos los casos de respuesta) |
 | [docs/MANUAL_VERIFICATION_CHECKLIST.es.md](docs/MANUAL_VERIFICATION_CHECKLIST.es.md) | Lista de verificación de banco para una persona con la placa real |
@@ -98,7 +101,7 @@ veredictos (tap + emparejar, incl. 404 / 409 / 422 / 401).
 ## Estructura del repositorio
 
 ```text
-platformio.ini            entornos de build: esp32dev (por defecto: RC522 real) | esp32dev-mock | native
+platformio.ini            entornos de build: esp32cam (por defecto: estación de cámara) | esp32dev (lector) | esp32dev-mock | native
 include/config.h          pines + tiempos (confírmalos contra tu cableado)
 include/secrets.h.example plantilla de credenciales (secrets.h está ignorado por git)
 src/main.cpp              raíz de composición delgada (solo cableado)
@@ -110,6 +113,7 @@ lib/WifiService/          conexión acotada + reconexión no bloqueante
 test/                     pruebas unitarias nativas en el host (65)
 tools/e2e/                arnés E2E: payloads y parser del firmware vs backend real
 scripts/e2e_backend.sh    E2E de integración con el backend (BD desechable, HTTP real)
+scripts/flash.sh          envoltorio de flasheo por placa (estación | lector | simulado)
 docs/                     documentación real bilingüe (EN/ES)
 ```
 

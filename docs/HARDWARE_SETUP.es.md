@@ -126,21 +126,37 @@ El monitor serial imprime una línea bilingüe por cada evento (prefijos
 
 ## Entornos de compilación
 
+> Desde ADR-010 el entorno POR DEFECTO del repositorio es la **estación
+> de cámara** (`esp32cam`, estación primero), así que un `pio run -t
+> upload` simple flashea la imagen de estación, no este lector. El
+> entorno del lector es optativo: pasa siempre el entorno explícito
+> (`pio run -e esp32dev`) o usa el envoltorio de un comando
+> `scripts/flash.sh --esp32` (mapa completo de placas:
+> [docs/FLASHING.es.md](FLASHING.es.md)).
+
 | Entorno | Lector | Uso |
 |---|---|---|
-| `esp32dev` (**por defecto**) | `Rc522NfcReader` (RC522 por SPI) | el lector real — `pio run` y `pio run -t upload` lo compilan desde TASK-002 |
+| `esp32dev` (optativo) | `Rc522NfcReader` (RC522 por SPI) | el lector real — `pio run -e esp32dev` / `scripts/flash.sh --esp32` |
 | `esp32dev-mock` (opcional) | `MockSerialNfcReader` — escribe un UID + Enter en el Monitor Serial | desarrollo sin RC522; aun así ejercita Wi-Fi, HTTP, modos y retroalimentación en una placa real |
 | `native` | — | pruebas unitarias en el host (`pio test -e native`) |
+
+El entorno `esp32cam` de la estación (cámara + RC522 por SPI) está
+documentado en [docs/CAMERA_STATION.es.md](CAMERA_STATION.es.md).
 
 ## Flasheo
 
 ```bash
 cp include/secrets.h.example include/secrets.h   # luego edita: Wi-Fi, URL del backend, clave del lector, MODE_PASSWORD
-pio run -e esp32dev -t upload                     # lector real (entorno por defecto desde TASK-002)
-#   equivalente a: pio run -t upload
-pio run -e esp32dev-mock -t upload                # lector simulado (opcional)
 
-pio device monitor                                # 115200 baudios
+# El entorno del lector es OPTATIVO desde ADR-010 — el entorno por defecto
+# es la estación de cámara `esp32cam`, y un `pio run -t upload` simple
+# flashearía la imagen de estación en lugar de este lector.
+pio run -e esp32dev -t upload                     # lector real
+./scripts/flash.sh --esp32                        # igual, vía el envoltorio de flasheo
+pio run -e esp32dev-mock -t upload                # lector simulado (opcional)
+./scripts/flash.sh --mock                         # igual
+
+pio device monitor -e esp32dev                    # 115200 baudios
 ```
 
 La clave del lector viene de la salida del seeder de B2B-Core (`./run setup`

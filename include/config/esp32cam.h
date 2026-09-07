@@ -34,6 +34,13 @@
 #define PIN_SHUTTER_BUTTON  12   // active-LOW to GND — confirm wiring
 #define SHUTTER_DEBOUNCE_MS 50   // contact-settle window per press
 
+// --- Recycling transaction windows (anti-steal timeouts, relaxed) -----------
+// Bottle-first: BUTTON capture → tap window. Card-first: tap → BUTTON window.
+// Shorter than the backend's 300 s hold so a stray next person can't claim
+// your bottle, but long enough to tap relaxed. Wrap-safe millis() compares.
+#define PENDING_CAPTURE_TIMEOUT_MS 90000  // 90 s to tap after bottle capture
+#define ARMED_EVENT_TIMEOUT_MS     90000  // 90 s to press BUTTON after tap
+
 // --- Camera recovery: init is heavy (sensor + PSRAM frame buffers), so a
 // failed camera retries on a slower cadence than the RC522. millis()-based,
 // non-blocking; the station stays alive meanwhile.

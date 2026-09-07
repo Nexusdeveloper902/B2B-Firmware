@@ -123,21 +123,35 @@ The serial monitor prints a bilingual line for every event (see the
 
 ## Build environments
 
+> Since ADR-010 the repo's DEFAULT build env is the **camera station**
+> (`esp32cam`, station-first), so a bare `pio run -t upload` flashes the
+> station image, not this reader. The reader env is opt-in: always pass
+> the env explicitly (`pio run -e esp32dev`) or use the one-command
+> wrapper `scripts/flash.sh --esp32` (full board map: [docs/FLASHING.md](FLASHING.md)).
+
 | Environment | Reader | Use |
 |---|---|---|
-| `esp32dev` (**default**) | `Rc522NfcReader` (RC522 over SPI) | the real reader — `pio run` and `pio run -t upload` target it since TASK-002 |
+| `esp32dev` (opt-in) | `Rc522NfcReader` (RC522 over SPI) | the real reader — `pio run -e esp32dev` / `scripts/flash.sh --esp32` |
 | `esp32dev-mock` (opt-in) | `MockSerialNfcReader` — type a UID + Enter in the Serial Monitor | development without the RC522 attached; still exercises Wi-Fi, HTTP, modes, feedback on a real board |
 | `native` | — | host-side unit tests (`pio test -e native`) |
+
+The station's `esp32cam` env (camera + RC522 over SPI) is documented in
+[docs/CAMERA_STATION.md](CAMERA_STATION.md).
 
 ## Flashing
 
 ```bash
 cp include/secrets.h.example include/secrets.h   # then edit: Wi-Fi, backend URL, reader key, MODE_PASSWORD
-pio run -e esp32dev -t upload                     # real reader (default env since TASK-002)
-#   equivalent to: pio run -t upload
-pio run -e esp32dev-mock -t upload                # mock reader (opt-in)
 
-pio device monitor                                # 115200 baud
+# The reader env is OPT-IN since ADR-010 — the default env is the camera
+# station `esp32cam`, and a bare `pio run -t upload` would flash the
+# station image instead of this reader.
+pio run -e esp32dev -t upload                     # real reader
+./scripts/flash.sh --esp32                        # same, via the flash wrapper
+pio run -e esp32dev-mock -t upload                # mock reader (opt-in)
+./scripts/flash.sh --mock                         # same
+
+pio device monitor -e esp32dev                    # 115200 baud
 ```
 
 The reader key comes from the B2B-Core seeder output (`./run setup` in

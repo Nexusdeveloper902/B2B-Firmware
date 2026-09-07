@@ -4,9 +4,10 @@
  * from src/main.cpp (tap pipeline, console) and the former camera-only
  * src/camera/main.cpp (capture, upload, visualizer), with two behavior
  * changes: (1) camera/Wi-Fi failures are recoverable states, never halts;
- * (2) a tap whose backend answer is next_step awaiting_classification
- * auto-captures+classifies in the same transaction (no new protocol —
- * the existing classifyWithEvent path).
+ * (2) tap is context-sensitive: with a bottle-first capture pending it
+ * associates that capture (no new event); otherwise a tap answered with
+ * next_step awaiting_classification ARMS the event — capture+classify on
+ * the NEXT button/ENTER press (no auto-capture).
  */
 #include "station.h"
 
@@ -138,12 +139,18 @@ void Station::printBanner() {
     Serial.println(API_BASE_URL);
     Serial.println();
     Serial.println("[EN] Serial commands / [ES] Comandos seriales:");
-    Serial.println("  ENTER            capture + upload (bottle-first) / capturar + subir (botella-primero)");
+    Serial.println("  TAP CARD         closes pending capture (associate) — else arms card-first, then BUTTON/ENTER captures / tocar tarjeta cierra captura pendiente — si no, arma y luego BOTÓN/ENTER captura");
+    Serial.println("  ENTER            capture + upload (bottle-first if nothing armed) / capturar + subir (botella-primero si nada armado)");
     Serial.println("  a <credential_uid>  associate last capture with this card / asociar la última captura con esta tarjeta");
     Serial.println("  e <event_id>     arm card-first classify for next ENTER / armar clasificación tarjeta-primero para el próximo ENTER");
     Serial.println("  c                local capture only (no upload) / captura local sin subir");
     Serial.println("  BUTTON (GPIO12->GND) same as ENTER / igual que ENTER");
     Serial.println("  MODE PASSWORD + Enter switches operation/pairing (masked, lockout-guarded)");
+    Serial.printf("  Windows: tap-after-capture %lus, button-after-tap %lus / Ventanas: toque-tras-captura %lus, botón-tras-toque %lus\n",
+                  (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000),
+                  (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000),
+                  (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000),
+                  (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
     Serial.println();
 }
 
@@ -157,6 +164,7 @@ void Station::update() {
     wifi_.tick(now);
     led_.tick(now);
     server_.handleClient();
+    expireStaleTransactions(now);  // anti-steal windows, before any tap/button use
     pollSerial();
 
     if (shutter_.poll()) {
@@ -376,14 +384,20 @@ void Station::doCaptureAndUpload() {
 
     if (armedEventId_ > 0) {
         // Card-first: classify the PRECEDING tap's event (spec §2/§8).
-        Serial.printf("[EN] Card-first classify for event %ld...\n", armedEventId_);
-        Serial.printf("[ES] Clasificación tarjeta-primero para el evento %ld...\n", armedEventId_);
-        std::string body = CapturePayload::classifyWithEvent(
-            armedEventId_, latestCapture_, latestCaptureSize_);
-        HttpResponse r = api_.post("/api/v1/recycling/classify", body, CapturePayload::contentType());
-        reportUpload("classify", r.status, String(r.body.c_str()), r.transportOk);
-        armedEventId_ = -1;  // one-shot: never re-classify a stale event by accident
-        return;
+        // Lazy expiry first: a stale arm must never steal the new bottle.
+        expireStaleTransactions(millis());
+        if (armedEventId_ <= 0) {
+            // Expired just now — fall through to bottle-first below.
+        } else {
+            Serial.printf("[EN] Card-first classify for event %ld...\n", armedEventId_);
+            Serial.printf("[ES] Clasificación tarjeta-primero para el evento %ld...\n", armedEventId_);
+            std::string body = CapturePayload::classifyWithEvent(
+                armedEventId_, latestCapture_, latestCaptureSize_);
+            HttpResponse r = api_.post("/api/v1/recycling/classify", body, CapturePayload::contentType());
+            reportUpload("classify", r.status, String(r.body.c_str()), r.transportOk);
+            armedEventId_ = -1;  // one-shot: never re-classify a stale event by accident
+            return;
+        }
     }
 
     // Bottle-first (spec §3 Case B): image WITHOUT a student. The
@@ -395,27 +409,66 @@ void Station::doCaptureAndUpload() {
     HttpResponse r = api_.post("/api/v1/recycling/capture", body, CapturePayload::contentType());
     reportUpload("capture", r.status, String(r.body.c_str()), r.transportOk);
 
-    backendCaptureId_ = extractLongField(String(r.body.c_str()), "capture_id");
-    if (backendCaptureId_ > 0) {
-        Serial.printf("[EN] Backend capture id %ld — now tap a card ('a <credential_uid>').\n", backendCaptureId_);
-        Serial.printf("[ES] Captura %ld en el backend — ahora toca una tarjeta ('a <credential_uid>').\n", backendCaptureId_);
+    if (!r.transportOk || r.status != 200) {
+        return;  // keep any previous pending id so the operator can retry
+    }
+    const long newId = extractLongField(String(r.body.c_str()), "capture_id");
+    if (newId > 0) {
+        if (backendCaptureId_ > 0 && backendCaptureId_ != newId) {
+            Serial.printf("[STATION] overwriting pending capture %ld with %ld (old one expires server-side) / reemplazando captura pendiente %ld con %ld\n",
+                          (long) backendCaptureId_, newId, (long) backendCaptureId_, newId);
+        }
+        backendCaptureId_ = newId;
+        backendCaptureAtMs_ = millis();
+        Serial.printf("[EN] Backend capture id %ld — tap a card within %lus (or type 'a <credential_uid>').\n",
+                      backendCaptureId_, (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000));
+        Serial.printf("[ES] Captura %ld en el backend — toca una tarjeta dentro de %lus (o escribe 'a <credential_uid>').\n",
+                      backendCaptureId_, (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000));
     }
 }
 
 void Station::doAssociate(const std::string& uid) {
+    expireStaleTransactions(millis());
     if (backendCaptureId_ <= 0) {
         Serial.println("[EN] No pending capture id — press ENTER first.");
         Serial.println("[ES] No hay captura pendiente — presiona ENTER primero.");
         return;
     }
 
+    const long target = backendCaptureId_;
     std::string body = buildAssociatePayload(uid);
-    std::string path = "/api/v1/recycling/captures/" + std::to_string(backendCaptureId_) + "/associate";
+    std::string path = "/api/v1/recycling/captures/" + std::to_string(target) + "/associate";
     HttpResponse r = api_.post(path, body);
     reportUpload("associate", r.status, String(r.body.c_str()), r.transportOk);
+    if (r.transportOk && r.status == 200) {
+        backendCaptureId_ = -1;  // resolved — next tap arms a new card-first
+    } else if (r.transportOk && r.status == 404) {
+        Serial.printf("[STATION] pending capture %ld gone/expired — cleared / captura %ld ausente/expirada — liberada\n",
+                      target, target);
+        backendCaptureId_ = -1;
+    }
+    // transport/network errors keep the pending id so the operator can retry
+}
+
+void Station::expireStaleTransactions(uint32_t now) {
+    // Wrap-safe: unsigned subtraction handles the ~49.7 day millis() wrap.
+    if (backendCaptureId_ > 0 &&
+        (now - backendCaptureAtMs_) >= PENDING_CAPTURE_TIMEOUT_MS) {
+        Serial.printf("[STATION] pending capture %ld expired after %lus — cleared, next tap starts a new card-first / captura %ld expirada tras %lus — liberada\n",
+                      (long) backendCaptureId_, (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000),
+                      (long) backendCaptureId_, (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000));
+        backendCaptureId_ = -1;
+    }
+    if (armedEventId_ > 0 && (now - armedAtMs_) >= ARMED_EVENT_TIMEOUT_MS) {
+        Serial.printf("[STATION] armed event %ld expired after %lus — cleared, button is bottle-first again / evento armado %ld expirado tras %lus — liberado\n",
+                      (long) armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000),
+                      (long) armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
+        armedEventId_ = -1;
+    }
 }
 
 void Station::handleCaptureCommand(const CaptureCommand& cmd) {
+    expireStaleTransactions(millis());
     switch (cmd.kind) {
         case CaptureCommand::Capture:
             doCaptureAndUpload();
@@ -425,8 +478,11 @@ void Station::handleCaptureCommand(const CaptureCommand& cmd) {
             break;
         case CaptureCommand::ArmEvent:
             armedEventId_ = atol(cmd.arg.c_str());
-            Serial.printf("[EN] Armed card-first classify for event %ld (next ENTER captures).\n", armedEventId_);
-            Serial.printf("[ES] Armada clasificación tarjeta-primero para el evento %ld (el próximo ENTER captura).\n", armedEventId_);
+            armedAtMs_ = millis();
+            Serial.printf("[EN] Armed card-first classify for event %ld (next BUTTON/ENTER captures within %lus).\n",
+                          armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
+            Serial.printf("[ES] Armada clasificación tarjeta-primero para el evento %ld (el próximo BOTÓN/ENTER captura dentro de %lus).\n",
+                          armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
             break;
         case CaptureCommand::LocalOnly:
             captureHighResolution();
@@ -569,12 +625,15 @@ void Station::switchMode() {
     showModeEvent(FeedbackKind::ModeSwitched);
     refreshStateLed();
     debouncer_.reset();  // a tap in flight must not straddle the switch
+    backendCaptureId_ = -1;  // pending bottle must not cross modes (anti-steal)
+    armedEventId_ = -1;      // armed card-first must not cross modes
 }
 
 // ---------------------------------------------------------------------------
 // RFID → presence pipeline (reader logic, intact) + station transaction:
-// a tap answered with next_step awaiting_classification auto-captures and
-// classifies in the same flow (existing classifyWithEvent path).
+// tap closes a pending bottle-first capture (associate), else a tap with
+// next_step awaiting_classification ARMS the event for the NEXT
+// button/ENTER press (classifyWithEvent). No auto-capture.
 // ---------------------------------------------------------------------------
 
 void Station::printReaderKeyRemediation() {
@@ -589,6 +648,16 @@ void Station::handleCardTap(const std::string& uid) {
     Serial.println(uid.c_str());
 
     ApiCall call = mode_->onCardTap(uid);
+    // Lazy expiry first: an expired pending must not steal this tap.
+    expireStaleTransactions(millis());
+    // Bottle-first pending: a physical tap IS the associate (no new tap
+    // event, no arming). Serial 'a <uid>' does the same via doAssociate.
+    if (call.type == ApiCallType::Tap && backendCaptureId_ > 0) {
+        Serial.printf("[STATION] tap closes pending capture %ld — associating, no new event / el toque cierra la captura pendiente %ld — asociando\n",
+                      (long) backendCaptureId_, (long) backendCaptureId_);
+        doAssociate(uid);
+        return;
+    }
     HttpResponse response = api_.post(call.path, call.jsonBody);
 
     if (call.type == ApiCallType::Tap) {
@@ -627,14 +696,25 @@ void Station::handleCardTap(const std::string& uid) {
         }
         led_.showEvent(signal);
 
-        // Station transaction: identity resolved AND the backend wants a
-        // photo for this event → capture + classify now (card-first).
+        // Station transaction (card-first, manual): identity resolved AND
+        // the backend wants a photo for this event → ARM it. The NEXT
+        // button/ENTER press captures+classifies (doCaptureAndUpload consumes
+        // armedEventId_ one-shot). No auto-capture here: the operator frames
+        // the bottle then presses the shutter.
         if (result.outcome == TapOutcome::Success && result.awaitingClassification &&
             result.eventId > 0) {
-            Serial.printf("[STATION] auto-capture for event %ld / auto-captura para el evento %ld\n",
-                          (long) result.eventId, (long) result.eventId);
+            // No bottle pending here (early-return above associates it), so
+            // this tap is a pure card-first arm.
+            if (armedEventId_ > 0 && armedEventId_ != result.eventId) {
+                Serial.printf("[STATION] overwriting armed event %ld with %ld / reemplazando evento armado %ld con %ld\n",
+                              (long) armedEventId_, (long) result.eventId,
+                              (long) armedEventId_, (long) result.eventId);
+            }
             armedEventId_ = result.eventId;
-            doCaptureAndUpload();  // consumes armedEventId_ (one-shot)
+            armedAtMs_ = millis();
+            Serial.printf("[STATION] card-first armed for event %ld — press BUTTON/ENTER within %lus to capture / armado para el evento %ld — presiona BOTÓN/ENTER dentro de %lus para capturar\n",
+                          (long) result.eventId, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000),
+                          (long) result.eventId, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
         }
     } else {  // ApiCallType::PairCard
         PairResult result = parsePairResponse(response.status, response.body);

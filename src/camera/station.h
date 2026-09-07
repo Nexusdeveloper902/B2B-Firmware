@@ -13,11 +13,14 @@
  *              HTTP POSTs and capture delays excepted, as before).
  *
  * Application flow: an RFID tap resolves identity through the SAME
- * presence tap endpoint the reader uses; when the backend answers
- * next_step awaiting_classification with an event id, the station
- * captures and classifies within that transaction (card-first). ENTER /
- * shutter stay bottle-first (capture → hold awaiting_card → `a <uid>`
- * associates). Pairing mode, console password, debounce, Bearer auth and
+ * presence tap endpoint the reader uses, EXCEPT when a bottle-first
+ * capture is pending (awaiting_card): then the tap UID associates that
+ * capture directly (no new event). Otherwise, when the backend answers
+ * next_step awaiting_classification with an event id, the station ARMS
+ * that event — the NEXT button/ENTER press captures+classifies
+ * (card-first, manual). A button/ENTER with nothing armed stays
+ * bottle-first (capture → hold awaiting_card → tap/`a <uid>` associates).
+ * Pairing mode, console password, debounce, Bearer auth and
  * multipart wire bytes are reused unchanged from the existing libs.
  */
 #pragma once
@@ -89,6 +92,7 @@ private:
     void doCaptureAndUpload();
     void doAssociate(const std::string& uid);
     void handleCaptureCommand(const CaptureCommand& cmd);
+    void expireStaleTransactions(uint32_t now);  // anti-steal timeouts
     void reportUpload(const char* what, int status, const String& body, bool transportOk);
     void chirpSuccess();  // no-op while PIN_CAM_BUZZER is -1 (GPIO4 = RC522 RST)
 
@@ -121,7 +125,9 @@ private:
     uint32_t latestCaptureId_ = 0;
     volatile bool cameraBusy_ = false;
     long backendCaptureId_ = -1;
+    uint32_t backendCaptureAtMs_ = 0;  // when the pending capture was stored
     long armedEventId_ = -1;
+    uint32_t armedAtMs_ = 0;  // when the card-first event was armed
 
     // recoverable subsystem state (STEP 8: never FATAL-halt)
     bool cameraOk_ = false;
