@@ -95,3 +95,24 @@ B2B-Core TASK-025's endpoints:
   rides EspApiClient (the TASK-007 Bearer lesson, one auth path).
 - Reader envs build src/main.cpp only (src filters); reader behavior is
   byte-for-byte untouched. Bench script: docs/CAMERA_STATION.md (+.es).
+
+## TASK-009 additions (2026-09-07, RUN-2026-09-07-firmware-011)
+
+`esp32cam` is now the complete STATION in one device (ADR-009): a
+`Station` lifecycle (`src/camera/station.h/.cpp`, thin main) owns
+camera + RC522 + Wi-Fi + presence tap pipeline + capture trigger +
+feedback + visualizer, with recoverable per-subsystem states (camera
+re-init 30 s, NFC 5 s, Wi-Fi via WifiService — no FATAL halts). A tap
+answered `awaiting_classification` + event id auto-captures and
+classifies in the same transaction (existing `classifyWithEvent`
+path); ENTER/shutter stay bottle-first; pairing, console password and
+all prior flows preserved.
+
+Hardware authority is `include/config/{common,esp32dev,esp32cam}.h`
+with `config.h` dispatching on `-DCAMERA_STATION` (`config_camera.h`
+deleted): RC522 13/14/15/2/4 (bench-verified), buzzer -1 (GPIO4 is
+RST), shutter 12→GND, status LED 33 (active-LOW), PSRAM 16/17
+reserved, no SD. Pinned by `test_station_config.cpp` (static_asserts;
+native 92/92). Default build is the station (ADR-010, supersedes
+ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
+--esp32`. Secrets stay split (`secrets.h` vs `secrets.camera.h`).
