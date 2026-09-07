@@ -1,19 +1,44 @@
-# Firmware de la Estación de Cámara — TASK-008 (ES)
+# Firmware de la Estación ESP32-CAM — TASK-008+ (ES)
 
-La mitad de adquisición de imágenes de la estación de reciclaje: una
-ESP32-CAM AI-Thinker (OV3660) que captura un JPEG cuando se dispara el
-disparador y lo sube a B2B-Core. Fusionada desde la implementación de
-referencia verificada (`ESP32-CAM-CV/firmware/esp32_cam` — init de
-cámara, captura JPEG, comandos seriales y visualizador HTTP), añadiendo
-el cableado de subida que exige esta tarea.
+La estación completa de reciclaje en UN dispositivo: ESP32-CAM
+AI-Thinker (OV3660) con cámara + RC522. Los toques RFID resuelven
+identidad por el endpoint de tap de presencia; cuando el backend
+responde next_step `awaiting_classification`, la estación captura y
+clasifica dentro de la misma transacción (tarjeta-primero). ENTER /
+botón siguen botella-primero. Init de cámara, captura JPEG, comandos
+seriales y visualizador HTTP vienen de la implementación de referencia
+verificada (`ESP32-CAM-CV/firmware/esp32_cam`).
 
-El firmware del lector (RC522, entorno `esp32dev`) queda intacto — ver
-`docs/HARDWARE_SETUP.es.md` para ese dispositivo.
+El firmware lector standalone (RC522, entorno `esp32dev`) se conserva
+para la placa DevKit — ver `docs/HARDWARE_SETUP.es.md`.
+
+## Cableado de la estación (autoritativo — verificado en banco 2026-09-07)
+
+| Pin RC522 | GPIO ESP32-CAM | nota |
+|---|---|---|
+| SDA (SS)  | **13** | selección SPI |
+| SCK       | **14** | reloj SPI (pin CLK de SD, SD sin usar) |
+| MOSI      | **15** | MOSI SPI (pin CMD de SD, SD sin usar) |
+| MISO      | **2**  | MISO SPI (pin DATA0 de SD, SD sin usar) |
+| RST       | **4**  | reset del RC522 (el LED de flash lo comparte — destellos normales) |
+| 3.3V / VCC | 3V3  | nunca 5 V |
+| GND       | GND   | tierra común |
+
+Reservado / prohibido: **GPIO16/17 = PSRAM** (nunca RST del RC522);
+**GPIO12 = botón a GND solamente** (strapping MTDI — nunca 3V3);
+**zumbador ausente** (`PIN_CAM_BUZZER -1`: GPIO4 es RST, un zumbador
+en reposo LOW mantendría el RC522 en reset); **SD intencionalmente sin
+usar** (nunca iniciar `SD_MMC`/`SD` — esos pines son el bus SPI).
+LED único de estado: rojo en **GPIO33** (activo-LOW): latido = reposo
+operación, doble = emparejar, triple = degradado (cámara/NFC/red
+caídos — la estación sigue viva y reintenta), rápido = conectando;
+sólido 1.5 s = evento de éxito.
 
 ## Qué hace este firmware
 
-| Comando serial | Acción |
+| Entrada | Acción |
 |---|---|
+| Toque RFID | Tap de presencia → con `awaiting_classification` + event id: auto-captura + `POST /api/v1/recycling/classify` (tarjeta-primero, una transacción) |
 | `ENTER` (línea vacía) | Captura un JPEG de alta resolución → `POST /api/v1/recycling/capture` (botella-primero: el backend retiene la imagen `awaiting_card`; **sin llamada al clasificador hasta que una tarjeta la resuelva** — puerta de costo, spec §4) |
 | `a <credential_uid>` | `POST /api/v1/recycling/captures/<última>/associate` — resuelve la última captura con esa tarjeta (evento + clasificación + puntos, B2B-Core TASK-025) |
 | `e <event_id>` | Arma modo tarjeta-primero: el PRÓXIMO `ENTER` captura y hace `POST /api/v1/recycling/classify` con ese event_id |
@@ -107,7 +132,7 @@ los ojos del operador de la referencia, conservados.
 
 ## Estado de verificación (sección de honestidad)
 
-- Verificado en el host (este repositorio): 86/86 pruebas nativas, los
+- Verificado en el host (este repositorio): 92/92 pruebas nativas (incl. mapa de pines + feedback de estación), los
   cuatro entornos de compilación en verde (`esp32dev`, `esp32dev-mock`,
   `esp32cam`, y un checkout nuevo sin los archivos de secretos compila
   gracias a la guarda `__has_include`).

@@ -13,6 +13,7 @@
  *   MODE LED  operation : 100 ms ON every 2000 ms (slow heartbeat blip)
  *   MODE LED  pairing   : 100 ms ON, 100 OFF, 100 ON, then 1700 OFF (double blip / 2 s)
  *   MODE LED  connecting: 100 ON / 100 OFF forever (rapid blink)
+ *   MODE LED  degraded  : triple blip every 2 s (station alive, subsystem down)
  *   EVENT LED patterns (one-shot):
  *     success          : 1500 ms solid ON
  *     tap rejected     : 2x (200 ON / 200 OFF)

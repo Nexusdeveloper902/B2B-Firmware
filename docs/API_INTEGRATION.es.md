@@ -64,7 +64,7 @@ TASK-003).
 
 | HTTP | Significado en el backend | Resultado parseado | Retroalimentación |
 |---|---|---|---|
-| 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | LED EVENTO sólido 1.5 s (+ registro serial con estudiante y tipo; `next_step == "awaiting_classification"` se registra, nada más — la clasificación está fuera de alcance) |
+| 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | LED EVENTO sólido 1.5 s (+ registro serial con estudiante y tipo; `next_step == "awaiting_classification"` se registra, nada más — la clasificación está fuera de alcance del lector (la estación ESP32-CAM auto-captura+clasifica con él — ver CAMERA_STATION.es.md) |
 | 401 | clave Bearer faltante/inválida → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 destellos rápidos |
 | 404 | tarjeta desconocida (`Card not recognized`) o inactiva (`Card is not active`) | `TapOutcome::CardNotRecognized` | 2 destellos; mensaje registrado |
 | 422 | error de validación | `TapOutcome::ValidationError` | sólido largo (estilo error de servidor) |

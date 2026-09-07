@@ -10,6 +10,11 @@ std::vector<LedPhase> modeLedPattern(FeedbackKind state) {
         case FeedbackKind::IdlePairing:
             // double blip every 2 s — clearly distinct from operation
             return {{100, true}, {100, false}, {100, true}, {1700, false}};
+        case FeedbackKind::StationDegraded:
+            // triple blip every 2 s — alive but degraded; distinct count
+            // from operation (1) and pairing (2)
+            return {{100, true}, {100, false}, {100, true}, {100, false},
+                    {100, true}, {1400, false}};
         case FeedbackKind::IdleOperation:
         default:
             // single short heartbeat blip every 2 s
@@ -21,6 +26,7 @@ std::vector<LedPhase> eventLedPattern(FeedbackKind kind) {
     switch (kind) {
         case FeedbackKind::TapSuccess:
         case FeedbackKind::PairSuccess:
+        case FeedbackKind::CaptureSuccess:
             // solid 1.5 s — unmistakable "yes"
             return {{1500, true}};
 

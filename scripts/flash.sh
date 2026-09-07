@@ -5,10 +5,10 @@
 #
 # Why this exists: ESP32 devkits and ESP32-CAMs expose identical USB-UART
 # bridges, so the board type CANNOT be auto-detected reliably — the flag
-# below IS the selector. No flag = reader default (matches platformio.ini).
+# below IS the selector. No flag = station default (matches platformio.ini).
 #
 # Usage / Uso:
-#   ./scripts/flash.sh                    # reader (esp32dev, default)
+#   ./scripts/flash.sh                    # station (esp32cam, default)
 #   ./scripts/flash.sh --esp32            # reader (esp32dev)
 #   ./scripts/flash.sh --esp32cam         # camera station (esp32cam)
 #   ./scripts/flash.sh --mock             # mock reader (esp32dev-mock)
@@ -17,7 +17,7 @@
 # ---------------------------------------------------------------------------
 set -Eeuo pipefail
 
-ENV="esp32dev"
+ENV="esp32cam"
 PORT=""
 MONITOR=0
 

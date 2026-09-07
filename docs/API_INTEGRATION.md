@@ -60,7 +60,7 @@ default; switch modes with the serial-console password — TASK-003).
 
 | HTTP | Backend meaning | Parsed outcome | Firmware feedback |
 |---|---|---|---|
-| 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | EVENT LED solid 1.5 s (+ serial log with student + type; `next_step == "awaiting_classification"` is logged, nothing more — classification is out of scope) |
+| 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | EVENT LED solid 1.5 s (+ serial log with student + type; `next_step == "awaiting_classification"` is logged, nothing more — classification is out of scope for the reader (the ESP32-CAM station auto-captures+classifies on it — see CAMERA_STATION.md) |
 | 401 | missing/invalid Bearer key → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 fast blinks |
 | 404 | unknown card (`Card not recognized`) or inactive card (`Card is not active`) | `TapOutcome::CardNotRecognized` | 2 blinks; message logged |
 | 422 | validation error | `TapOutcome::ValidationError` | long solid (server-error style) |

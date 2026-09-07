@@ -1,18 +1,44 @@
-# Camera Station Firmware — TASK-008 (EN)
+# ESP32-CAM Station Firmware — TASK-008+ (EN)
 
-The recycling station's image-acquisition half: an AI-Thinker ESP32-CAM
-(OV3660) that captures a JPEG when the trigger fires and uploads it to
-B2B-Core. Merged from the known-working reference implementation
-(`ESP32-CAM-CV/firmware/esp32_cam` — camera init, JPEG capture, serial
-commands, HTTP visualizer), adding the upload wiring this task requires.
+The complete recycling station in ONE device: an AI-Thinker ESP32-CAM
+(OV3660) with camera + RC522 aboard. RFID taps resolve identity through
+the presence tap endpoint; when the backend answers next_step
+`awaiting_classification`, the station captures and classifies inside
+the same transaction (card-first). ENTER / shutter stay bottle-first.
+Camera init, JPEG capture, serial commands and HTTP visualizer are
+merged from the known-working reference implementation
+(`ESP32-CAM-CV/firmware/esp32_cam`).
 
-The reader firmware (RC522, `esp32dev` env) is untouched — see
-`docs/HARDWARE_SETUP.md` for that device.
+The standalone reader firmware (RC522, `esp32dev` env) is preserved for
+the DevKit board — see `docs/HARDWARE_SETUP.md` for that device.
+
+## Station wiring (authoritative — bench-verified 2026-09-07)
+
+| RC522 pin | ESP32-CAM GPIO | note |
+|---|---|---|
+| SDA (SS)  | **13** | SPI select |
+| SCK       | **14** | SPI clock (SD CLK pin, SD unused) |
+| MOSI      | **15** | SPI MOSI (SD CMD pin, SD unused) |
+| MISO      | **2**  | SPI MISO (SD DATA0 pin, SD unused) |
+| RST       | **4**  | RC522 reset (flash LED shares it — activity blinks are normal) |
+| 3.3V / VCC | 3V3  | never 5 V |
+| GND       | GND   | common ground |
+
+Reserved / forbidden: **GPIO16/17 = PSRAM** (never RC522 RST);
+**GPIO12 = shutter to GND only** (MTDI strapping — never 3V3);
+**buzzer absent** (`PIN_CAM_BUZZER -1`: GPIO4 is RST, an idle-LOW
+buzzer would hold the RC522 in reset); **SD card intentionally unused**
+(never init `SD_MMC`/`SD` — the slot's pins are the SPI bus now).
+Single status LED: red on **GPIO33** (active-LOW): heartbeat =
+operation idle, double-blip = pairing, triple-blip = degraded
+(camera/NFC/net down — station stays alive and retries), rapid =
+connecting; solid 1.5 s = success event.
 
 ## What this firmware does
 
-| Serial command | Action |
+| Input | Action |
 |---|---|
+| RFID card tap | Presence tap → on `awaiting_classification` + event id: auto-capture + `POST /api/v1/recycling/classify` (card-first, one transaction) |
 | `ENTER` (empty line) | Capture a high-res JPEG → `POST /api/v1/recycling/capture` (bottle-first: the backend holds the image `awaiting_card`; **no classifier call until a card resolves it** — the spec §4 cost gate) |
 | `a <credential_uid>` | `POST /api/v1/recycling/captures/<last>/associate` — resolve the last capture with that card (event + classification + points, B2B-Core TASK-025) |
 | `e <event_id>` | Arm card-first mode: the NEXT `ENTER` captures and `POST /api/v1/recycling/classify` with that event_id |
@@ -105,7 +131,7 @@ operator eyes, preserved.
 
 ## Verification status (honesty section)
 
-- Host-verified (this repository): 86/86 native tests, all four build
+- Host-verified (this repository): 92/92 native tests (incl. station pin map + station feedback), all four build
   environments green (`esp32dev`, `esp32dev-mock`, `esp32cam`, fresh
   checkout without the secrets files compiles via the `__has_include` guard).
 - Bench-verified by the owner: the flow above, against real hardware —

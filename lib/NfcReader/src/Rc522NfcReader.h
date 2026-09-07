@@ -89,6 +89,9 @@ public:
 
     const char* label() const override { return "RC522 (SPI)"; }
 
+    /** True when the last VersionReg probe answered (station health). */
+    bool healthy() const { return healthy_; }
+
     /** Last PCD firmware-version byte seen (0 when never probed). */
     uint8_t lastVersion() const { return version_; }
 

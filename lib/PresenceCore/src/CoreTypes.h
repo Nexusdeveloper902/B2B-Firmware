@@ -118,9 +118,11 @@ enum class FeedbackKind {
     BootConnecting,   // boot + Wi-Fi association in progress
     IdleOperation,    // idle in operation mode
     IdlePairing,      // idle in pairing mode
+    StationDegraded,  // station alive but a subsystem is down (camera/NFC/net)
     // operation-mode events / eventos del modo operación
     TapSuccess,       // presence event logged
     TapRejected,      // 404 — card not recognized / not active
+    CaptureSuccess,   // station: image captured + uploaded (HTTP 200)
     // pairing-mode events / eventos del modo emparejar
     PairSuccess,      // card paired to the student
     PairNoSession,    // 409 — no pairing session active

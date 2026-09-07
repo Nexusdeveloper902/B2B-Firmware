@@ -36,6 +36,14 @@ public:
         : baseUrl_(baseUrl), bearerKey_(bearerKey), timeoutMs_(timeoutMs) {}
 
     HttpResponse post(const std::string& path, const std::string& jsonBody) override {
+        return post(path, jsonBody, "application/json");
+    }
+
+    /** POST raw bytes (e.g. multipart image bodies) with an explicit
+     *  Content-Type. Same Bearer identity, timeout and never-throw
+     *  contract as post(). / POST de bytes con Content-Type explícito. */
+    HttpResponse post(const std::string& path, const std::string& body,
+                      const std::string& contentType) {
         HttpResponse response;
 
         HTTPClient http;
@@ -47,7 +55,7 @@ public:
         }
 
         http.setTimeout(timeoutMs_);
-        http.addHeader("Content-Type", "application/json");
+        http.addHeader("Content-Type", contentType.c_str());
         http.addHeader("Accept", "application/json");
         // TASK-007: explicit Authorization VALUE — see the header comment.
         // addHeader is safe here: setAuthorization() is never called, so
@@ -59,7 +67,11 @@ public:
         http.addHeader("Authorization",
                        bearerAuthorizationValue(bearerKey_).c_str());
 
-        int code = http.POST(jsonBody.c_str());
+        // Byte-array POST (not the const-char* overload): multipart bodies
+        // carry binary JPEG bytes that may contain NULs. The bytes go
+        // verbatim (CapturePayload documents the wire format).
+        int code = http.POST(reinterpret_cast<uint8_t*>(const_cast<char*>(body.data())),
+                             body.size());
         response.status = code;
 
         if (code > 0) {
