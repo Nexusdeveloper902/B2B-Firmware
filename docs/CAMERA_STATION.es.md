@@ -25,9 +25,18 @@ host en `test/test_capture_trigger.cpp`). La tecla ENTER es el
 disparador físico *temporal* — el futuro sensor IR la sustituye SOLO en
 la costura `CaptureTrigger` (spec §37).
 
+**Botón disparador:** un pulsador momentáneo entre **GPIO12 y GND** (sin
+resistencia — pull-up interno) dispara exactamente lo mismo que ENTER
+(antirrebote, una foto por pulsación, mantenerlo no repite). GPIO12 se
+eligió porque el bus de cámara, el LED de flash y tu RC522
+(13/14/15/2/4) están en otros pines — ver `config.h`. Nunca
+conectes GPIO12 a HIGH (strapping de arranque).
+
+**Zumbador:** ausente en este banco (`PIN_CAM_BUZZER -1`). GPIO4 es el RST del RC522 (verificado 2026-09-07), y un zumbador en reposo LOW lo mantendría en reset para siempre — sin zumbador hasta moverlo de GPIO4. El LED de flash comparte GPIO4 y destella con la actividad del RST — normal.
+
 ## Provisionamiento
 
-1. `cp include/secrets.h.example include/secrets.h` y completa:
+1. `cp include/secrets.camera.h.example include/secrets.camera.h` y completa (archivo propio, separado del `secrets.h` del lector — distinta identidad en el backend):
    - `WIFI_SSID` / `WIFI_PASSWORD` — la red del colegio.
    - `API_BASE_URL` — el host de B2B-Core, p. ej. `http://192.168.1.50:8000`
      (arráncalo con `./run serve --host` para que sea alcanzable por Wi-Fi).
@@ -100,8 +109,8 @@ los ojos del operador de la referencia, conservados.
 
 - Verificado en el host (este repositorio): 86/86 pruebas nativas, los
   cuatro entornos de compilación en verde (`esp32dev`, `esp32dev-mock`,
-  `esp32cam`, y un checkout nuevo sin `secrets.h` compila gracias a la
-  guarda `__has_include`).
+  `esp32cam`, y un checkout nuevo sin los archivos de secretos compila
+  gracias a la guarda `__has_include`).
 - Verificado en banco por el propietario: el flujo anterior, contra
   hardware real — según la convención de honestidad de hardware del
   repositorio (`docs/MANUAL_VERIFICATION_CHECKLIST.es.md`).

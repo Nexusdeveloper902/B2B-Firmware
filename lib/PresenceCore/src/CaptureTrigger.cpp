@@ -92,4 +92,26 @@ CaptureCommand TerminalCaptureTrigger::handleLine(const std::string& raw) {
                 // reader firmware owns; the camera station has no modes.
 }
 
+ButtonCaptureTrigger::ButtonCaptureTrigger(Level pressed, Clock clock,
+                                             unsigned long debounceMs)
+    : pressed_(std::move(pressed)), clock_(std::move(clock)), debounceMs_(debounceMs) {}
+
+bool ButtonCaptureTrigger::poll() {
+    const unsigned long now = clock_ ? clock_() : 0;
+    const bool raw = pressed_();
+    if (raw != lastRaw_) {
+        lastRaw_ = raw;  // edge seen: restart the stability window
+        lastChangeAt_ = now;
+        return false;
+    }
+    if (raw == stable_) {
+        return false;  // steady state — incl. still held after firing
+    }
+    if (now - lastChangeAt_ < debounceMs_) {
+        return false;  // still bouncing
+    }
+    stable_ = raw;
+    return stable_;  // true only on a settled press, once until release
+}
+
 }  // namespace Presence

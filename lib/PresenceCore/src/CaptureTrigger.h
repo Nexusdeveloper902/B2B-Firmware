@@ -63,6 +63,31 @@ public:
     virtual CaptureCommand feed(char c) = 0;
 };
 
+/** Physical push-button: poll() returns true exactly once per debounced
+ *  press (settled falling edge — holding never refires, bounce never
+ *  double-fires). Pure C++ — the device passes a digitalRead lambda as
+ *  `pressed`, host tests pass a fake. Fires CaptureCommand::Capture work
+ *  behind the same flow ENTER drives (see the firmware's loop). */
+class ButtonCaptureTrigger {
+public:
+    using Clock = std::function<unsigned long()>;
+    using Level = std::function<bool()>;  // true = pressed (active level)
+
+    explicit ButtonCaptureTrigger(Level pressed, Clock clock,
+                                  unsigned long debounceMs = 50);
+
+    /** Sample the button once; true = a new settled press happened. */
+    bool poll();
+
+private:
+    Level pressed_;
+    Clock clock_;
+    unsigned long debounceMs_;
+    bool lastRaw_ = false;
+    bool stable_ = false;
+    unsigned long lastChangeAt_ = 0;
+};
+
 class TerminalCaptureTrigger final : public CaptureTrigger {
 public:
     using Clock = std::function<unsigned long()>;

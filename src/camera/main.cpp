@@ -40,20 +40,23 @@
 
 #include <string>
 
-#include "config.h"
+#include "config_camera.h"  // CAM board's own copy — reader envs use config.h
 
-// Real credentials live ONLY in the gitignored include/secrets.h — the
-// same TASK-001 fresh-checkout guard the reader uses: a checkout without
-// secrets.h still compiles against the placeholder values and fails
-// Wi-Fi/HTTP gracefully instead of breaking the build.
-// / Las credenciales reales viven SOLO en el gitignored include/secrets.h
-// — la misma guarda de TASK-001: un checkout sin secrets.h compila con
-// valores de marcador y falla Wi-Fi/HTTP con gracia.
-#if __has_include("secrets.h")
-#include "secrets.h"
+// Real credentials live ONLY in the gitignored include/secrets.camera.h —
+// the camera station has its own secrets file, separate from the reader's
+// secrets.h (different backend identity). Same TASK-001 fresh-checkout
+// guard: a checkout without secrets.camera.h still compiles against the
+// placeholder values and fails Wi-Fi/HTTP gracefully instead of breaking
+// the build.
+// / Las credenciales reales viven SOLO en el gitignored
+// include/secrets.camera.h — archivo propio, separado del secrets.h del
+// lector. La misma guarda de TASK-001: sin él se compila con valores de
+// marcador y falla Wi-Fi/HTTP con gracia.
+#if __has_include("secrets.camera.h")
+#include "secrets.camera.h"
 #else
-#warning "include/secrets.h not found — building with example placeholder values (cp include/secrets.h.example include/secrets.h). / No se encontró include/secrets.h — se compila con valores de ejemplo."
-#include "secrets.h.example"
+#warning "include/secrets.camera.h not found — building with example placeholder values (cp include/secrets.camera.h.example include/secrets.camera.h). / No se encontró include/secrets.camera.h — se compila con valores de ejemplo."
+#include "secrets.camera.h.example"
 #endif
 
 #include "CapturePayload.h"
@@ -64,29 +67,9 @@
 
 using namespace Presence;
 
-// ===========================================================================
-// AI-Thinker ESP32-CAM pin map — from the reference platformio.ini/main
-// (verified board: esp32cam). DO NOT invent a new map.
-// ===========================================================================
-
-#define PWDN_GPIO_NUM     32
-#define RESET_GPIO_NUM    -1
-#define XCLK_GPIO_NUM      0
-#define SIOD_GPIO_NUM     26
-#define SIOC_GPIO_NUM     27
-
-#define Y9_GPIO_NUM       35
-#define Y8_GPIO_NUM       34
-#define Y7_GPIO_NUM       39
-#define Y6_GPIO_NUM       36
-#define Y5_GPIO_NUM       21
-#define Y4_GPIO_NUM       19
-#define Y3_GPIO_NUM       18
-#define Y2_GPIO_NUM        5
-
-#define VSYNC_GPIO_NUM    25
-#define HREF_GPIO_NUM     23
-#define PCLK_GPIO_NUM     22
+// Camera bus pin map lives in include/config.h (Section B — CAMERA
+// STATION board), from the reference platformio.ini/main (verified
+// board: esp32cam). DO NOT invent a new map here.
 
 static constexpr framesize_t STREAM_RESOLUTION = FRAMESIZE_VGA;
 static constexpr framesize_t CAPTURE_RESOLUTION = FRAMESIZE_XGA;
@@ -116,6 +99,11 @@ static EspApiClient api(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS);
 // The trigger seam (spec §37): TerminalCaptureTrigger today, IR later —
 // a drop-in replacement at THIS constructor only.
 TerminalCaptureTrigger trigger([]() { return millis(); });
+
+// Shutter button (config.h: PIN_SHUTTER_BUTTON, active-LOW to GND):
+// debounced in PresenceCore, fires the same flow as ENTER (loop polls it).
+ButtonCaptureTrigger shutter([]() { return digitalRead(PIN_SHUTTER_BUTTON) == LOW; },
+                             []() { return millis(); }, SHUTTER_DEBOUNCE_MS);
 
 // ===========================================================================
 // Free previous capture (reference, verbatim)
@@ -195,7 +183,22 @@ long extractLongField(const String& body, const char* field) {
     return digits.length() ? digits.toInt() : -1;
 }
 
+// Buzzer: same "success chirp only" convention as the reader's
+// LedFeedbackController (120 ms active-HIGH pulse, -1 = absent).
+// 120 ms blocking is negligible after a ~1 s capture + upload.
+void chirpSuccess() {
+    if (PIN_CAM_BUZZER < 0) {
+        return;
+    }
+    digitalWrite(PIN_CAM_BUZZER, HIGH);
+    delay(120);
+    digitalWrite(PIN_CAM_BUZZER, LOW);
+}
+
 void reportUpload(const char* what, const UploadResult& r) {
+    if (r.transportOk && r.status == 200) {
+        chirpSuccess();
+    }
     if (!r.transportOk) {
         Serial.printf("[EN] %s: NETWORK ERROR (transport). Check Wi-Fi / API_BASE_URL.\n", what);
         Serial.printf("[ES] %s: ERROR DE RED (transporte). Revisa Wi-Fi / API_BASE_URL.\n", what);
@@ -613,6 +616,12 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    pinMode(PIN_SHUTTER_BUTTON, INPUT_PULLUP);  // shutter: button to GND
+    if (PIN_CAM_BUZZER >= 0) {
+        pinMode(PIN_CAM_BUZZER, OUTPUT);
+        digitalWrite(PIN_CAM_BUZZER, LOW);
+    }
+
     Serial.println();
     Serial.println("================================");
     Serial.println("PRESENCE PLATFORM — CAMERA STATION");
@@ -624,10 +633,10 @@ void setup() {
     if (strstr(WIFI_SSID, "YOUR_") != nullptr ||
         strstr(WIFI_PASSWORD, "YOUR_") != nullptr ||
         strstr(READER_API_KEY, "00000000000000000000000000000000") != nullptr) {
-        Serial.println("[EN] WARNING: secrets.h still contains placeholder values —");
-        Serial.println("     edit include/secrets.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
-        Serial.println("[ES] AVISO: secrets.h aún tiene valores de marcador —");
-        Serial.println("     edita include/secrets.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
+        Serial.println("[EN] WARNING: secrets.camera.h still contains placeholder values —");
+        Serial.println("     edit include/secrets.camera.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
+        Serial.println("[ES] AVISO: secrets.camera.h aún tiene valores de marcador —");
+        Serial.println("     edita include/secrets.camera.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
     }
 
     if (!initializeCamera()) {
@@ -661,11 +670,15 @@ void setup() {
     Serial.println("  a <credential_uid>  associate last capture with this card / asociar la última captura con esta tarjeta");
     Serial.println("  e <event_id>     arm card-first classify for next ENTER / armar clasificación tarjeta-primero para el próximo ENTER");
     Serial.println("  c                local capture only (no upload) / captura local sin subir");
+    Serial.println("  BUTTON (GPIO12->GND) same as ENTER / igual que ENTER");
     Serial.println();
 }
 
 void loop() {
     server.handleClient();
     handleSerial();
+    if (shutter.poll()) {
+        handleCaptureCommand({CaptureCommand::Capture, ""});  // button == ENTER
+    }
     delay(1);
 }

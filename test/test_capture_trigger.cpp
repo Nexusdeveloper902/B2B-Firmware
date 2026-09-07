@@ -162,6 +162,86 @@ static void whitespace_padding_is_tolerated() {
     TEST_ASSERT_EQUAL_STRING("ABC123", cmd.arg.c_str());
 }
 
+namespace {
+bool fakePressed = false;
+bool fakeLevel() { return fakePressed; }
+}  // namespace
+
+static ButtonCaptureTrigger makeButton(unsigned long debounceMs = 50) {
+    return ButtonCaptureTrigger(fakeLevel, fakeClock, debounceMs);
+}
+
+// A settled press fires exactly once.
+static void button_press_fires_once() {
+    fakeNow = 0;
+    fakePressed = false;
+    ButtonCaptureTrigger b = makeButton();
+    TEST_ASSERT_FALSE(b.poll());
+    fakePressed = true;  // press: edge seen, stability window restarts
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 49;  // still bouncing
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 50;  // settled
+    TEST_ASSERT_TRUE(b.poll());
+}
+
+// Holding the button never refires (edge, not level).
+static void button_hold_never_refires() {
+    fakeNow = 0;
+    fakePressed = true;
+    ButtonCaptureTrigger b = makeButton();
+    TEST_ASSERT_FALSE(b.poll());  // edge at boot still debounces, not fires
+    fakeNow = 1000;
+    TEST_ASSERT_TRUE(b.poll());  // the one settled press
+    fakeNow = 100000;  // held for ages
+    TEST_ASSERT_FALSE(b.poll());
+    TEST_ASSERT_FALSE(b.poll());
+}
+
+// Contact bounce (rapid toggling) collapses into a single press.
+static void button_bounce_fires_once() {
+    fakeNow = 0;
+    fakePressed = false;
+    ButtonCaptureTrigger b = makeButton();
+    int fired = 0;
+    for (int i = 0; i < 10; i++) {  // 10 ms of chatter
+        fakeNow = i;
+        fakePressed = (i % 2 == 0);
+        if (b.poll()) {
+            fired++;
+        }
+    }
+    fakePressed = true;  // then genuinely held
+    for (int i = 10; i < 100; i++) {
+        fakeNow = i;
+        if (b.poll()) {
+            fired++;
+        }
+    }
+    TEST_ASSERT_EQUAL_INT(1, fired);
+}
+
+// Release + press is a new press (one photo per push).
+static void button_release_then_press_fires_again() {
+    fakeNow = 0;
+    fakePressed = false;
+    ButtonCaptureTrigger b = makeButton();
+    fakePressed = true;
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 50;
+    TEST_ASSERT_TRUE(b.poll());
+    fakeNow = 100;
+    fakePressed = false;  // release
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 200;  // settled released
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 300;
+    fakePressed = true;  // second push
+    TEST_ASSERT_FALSE(b.poll());
+    fakeNow = 350;
+    TEST_ASSERT_TRUE(b.poll());
+}
+
 void runCaptureTriggerTests() {
     RUN_TEST(enter_line_triggers_capture);
     RUN_TEST(associate_line_parses_the_uid);
@@ -175,4 +255,8 @@ void runCaptureTriggerTests() {
     RUN_TEST(crlf_is_tolerated);
     RUN_TEST(overlong_line_is_rejected_wholesale);
     RUN_TEST(whitespace_padding_is_tolerated);
+    RUN_TEST(button_press_fires_once);
+    RUN_TEST(button_hold_never_refires);
+    RUN_TEST(button_bounce_fires_once);
+    RUN_TEST(button_release_then_press_fires_again);
 }

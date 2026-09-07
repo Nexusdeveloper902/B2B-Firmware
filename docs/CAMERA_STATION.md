@@ -23,9 +23,18 @@ ENTER never multi-fires on key-repeat or buffered input (line discipline
 ENTER key is the *temporary* physical trigger — the future IR sensor
 replaces it at the `CaptureTrigger` seam only (spec §37).
 
+**Shutter button:** a momentary button between **GPIO12 and GND** (no
+resistor — internal pull-up) fires the exact same flow as ENTER
+(debounced, one photo per push, holding never refires). GPIO12 was
+chosen because the camera bus, the flash LED, and your RC522
+(13/14/15/2/4) are all elsewhere — see `config.h`. Never tie
+GPIO12 HIGH (boot strapping).
+
+**Buzzer:** absent on this bench (`PIN_CAM_BUZZER -1`). GPIO4 is RC522 RST (verified 2026-09-07), and a buzzer idling LOW would hold the active-LOW RC522 reset forever — so no buzzer until it moves off GPIO4. The flash LED shares GPIO4 and fires with RC522 RST activity — normal.
+
 ## Provisioning
 
-1. `cp include/secrets.h.example include/secrets.h` and fill in:
+1. `cp include/secrets.camera.h.example include/secrets.camera.h` and fill in (own file, separate from the reader's `secrets.h` — different backend identity):
    - `WIFI_SSID` / `WIFI_PASSWORD` — the school network.
    - `API_BASE_URL` — the B2B-Core host, e.g. `http://192.168.1.50:8000`
      (start it with `./run serve --host` so it is reachable from Wi-Fi).
@@ -98,7 +107,7 @@ operator eyes, preserved.
 
 - Host-verified (this repository): 86/86 native tests, all four build
   environments green (`esp32dev`, `esp32dev-mock`, `esp32cam`, fresh
-  checkout without `secrets.h` compiles via the `__has_include` guard).
+  checkout without the secrets files compiles via the `__has_include` guard).
 - Bench-verified by the owner: the flow above, against real hardware —
   per the repo's hardware-honesty convention
   (`docs/MANUAL_VERIFICATION_CHECKLIST.md`).

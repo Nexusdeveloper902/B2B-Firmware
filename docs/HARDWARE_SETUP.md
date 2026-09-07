@@ -35,11 +35,11 @@ the ESP32's 3V3 pin, never 5 V/VIN.
 
 | RC522 pin | ESP32 GPIO | config.h constant |
 |---|---|---|
-| SDA (SS)  | **5**  | `PIN_RC522_SS` |
-| SCK       | **18** | `PIN_RC522_SCK` (VSPI clock) |
-| MOSI      | **23** | `PIN_RC522_MOSI` (VSPI data out) |
-| MISO      | **19** | `PIN_RC522_MISO` (VSPI data in) |
-| RST       | **27** | `PIN_RC522_RST` |
+| SDA (SS)  | **13** | `PIN_RC522_SS` |
+| SCK       | **14** | `PIN_RC522_SCK` (VSPI clock) |
+| MOSI      | **15** | `PIN_RC522_MOSI` (VSPI data out) |
+| MISO      | **2**  | `PIN_RC522_MISO` (VSPI data in) |
+| RST       | **4**  | `PIN_RC522_RST` (bench-verified 2026-09-07: DIAG-CAM VersionReg 0x92 stable + raw agree; GPIO16 is PSRAM CS on ESP32-CAM — never RST) |
 | 3.3V / VCC | 3V3  | — |
 | GND       | GND   | — |
 

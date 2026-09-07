@@ -1,4 +1,10 @@
 /**
+ * config_camera.h — CAMERA STATION copy of config.h. Started identical;
+ * change freely per board: `esp32cam` builds read THIS file, the reader
+ * envs (`esp32dev`, `esp32dev-mock`) read config.h. Neither affects the
+ * other. / Copia para la CÁMARA: empezó idéntica, cámbiala por placa.
+ *
+ * (Original header kept below for reference.)
  * config.h — pin assignments and timing constants, separated per board.
  * config.h — asignación de pines y constantes de tiempo, por placa.
  *
@@ -26,9 +32,7 @@
 #define PIN_RC522_MISO  2  // RC522 MISO (VSPI data in) — confirm wiring
 #define PIN_RC522_MOSI  15  // RC522 MOSI (VSPI data out)— confirm wiring
 #define PIN_RC522_SS    13   // RC522 SDA (SS)            — confirm wiring
-#define PIN_RC522_RST   4  // RC522 RST — bench-verified 2026-09-07 (DIAG-CAM
-                           // 0x92 stable + raw agree). GPIO16 is PSRAM CS on
-                           // ESP32-CAM: never use it for RST.
+#define PIN_RC522_RST   4  // RC522 RST                 — confirm wiring
 
 // When the reader fails init (or dies at runtime: wiring glitch, ESD,
 // brown-out), retry PCD_Init on this cadence instead of staying dead
@@ -98,14 +102,14 @@
 #define SHUTTER_DEBOUNCE_MS 50   // contact-settle window per press
 
 // --- Buzzer ----------------------------------------------------------------
-// ABSENT (-1) on this bench: GPIO4 is RC522 RST (see Section A), and a
-// buzzer idling LOW would hold the active-LOW RC522 reset forever.
-// Re-enable (GPIO4, active-HIGH, 120 ms success chirp only) ONLY if the
-// buzzer moves off GPIO4. The white flash LED shares GPIO4 and fires
-// with RC522 RST activity — normal.
-// / AUSENTE (-1) en este banco: GPIO4 es el RST del RC522; un zumbador
-// en reposo LOW lo mantendría en reset. Reactivar solo si se mueve de pin.
-#define PIN_CAM_BUZZER      -1   // keep -1 while RC522 RST is on GPIO4
+// Buzzer (+) → GPIO4, (−) → GND; set to -1 if absent. Same part and
+// same "success chirp only" convention as the reader's PIN_BUZZER.
+// GPIO4 is the only free exposed pin (see the reserved lists above).
+// Side effect: the white flash LED (also on 4) fires with each 120 ms
+// chirp — harmless, free success flash.
+// / Zumbador (+) → GPIO4, (−) → GND; -1 si no hay. El LED de flash (4)
+// destella con cada pitido — normal, destello de éxito gratis.
+#define PIN_CAM_BUZZER      -1    // active-HIGH chirp — confirm wiring
 
 // ===========================================================================
 // Section C — SHARED timing, both boards (millis()-based, non-blocking)

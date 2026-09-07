@@ -11,6 +11,8 @@
 # --- Real secrets: NEVER commit ---
 include/secrets.h
 secrets.h
+include/secrets.camera.h
+secrets.camera.h
 
 # Runtime / OS
 *.log
