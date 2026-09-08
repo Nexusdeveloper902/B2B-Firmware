@@ -116,3 +116,26 @@ reserved, no SD. Pinned by `test_station_config.cpp` (static_asserts;
 native 92/92). Default build is the station (ADR-010, supersedes
 ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
 --esp32`. Secrets stay split (`secrets.h` vs `secrets.camera.h`).
+
+## TASK-010 delivery closed (2026-09-08, RUN-2026-09-08-firmware-012)
+
+- The station LED "unexpectedly on" report decomposed into three root
+  causes: (1) pre-e75e190 GPIO4-as-RST wiring (fixed in source since
+  e75e190 — now FORBIDDEN by compile-time asserts), (2) wrong-target
+  esp32dev image on the CAM board or inverted-polarity clone boards
+  (now a one-line config: `PIN_STATION_LED_ACTIVE_LOW`, ADR-011), (3)
+  the normal heartbeat grammar misread as a fault (now documented
+  bilingually in HARDWARE_SETUP + CAMERA_STATION).
+- Durable trap: pin-map constants buried in C++ constructors
+  (station.cpp's hardcoded activeLow=true with a "confirm polarity"
+  comment) are exactly where board-clone incompatibilities hide —
+  board electrical constants belong in the board config header, and
+  the pin map needs compile-time asserts (GPIO4-never-driven is the
+  assert that would have caught the original flash-LED bug at build
+  time).
+- Verification: native 93/93 (+1 pattern-dominance test), esp32cam
+  build SUCCESS, PlatformIO 6.2.0 provisioned via pip --user (no
+  sudo needed — same pattern as B2B-Core's static PHP).
+- Pending: physical bench session for the LED grammar + the full
+  CAMERA_STATION flow; B2B-Core TASK-027 (same session) closed the
+  backend punch list.
