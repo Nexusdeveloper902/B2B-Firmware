@@ -124,6 +124,29 @@ El monitor serial imprime una línea bilingüe por cada evento (prefijos
 `[NFC]` / `[OK]` / `[404]` / `[409]` / `[422]` / `[401]` / `[NET]` /
 `[MODE]` / `[ERR]`), de modo que patrones y registro se confirman mutuamente.
 
+## Diagnóstico de LED de la estación — «un LED se enciende sin razón» (seguimiento TASK-010)
+
+La estación ESP32-CAM tiene DOS LED y exactamente tres formas de que uno
+se encienda «solo». El LED rojo de la estación es el LED MODO+EVENTO en
+uno (la placa CAM no tiene un segundo LED libre):
+
+| Síntoma | Causa raíz | Solución |
+|---|---|---|
+| **LED flash blanco encendido fijo** | El RST del RC522 sigue cableado a GPIO4 (cableado anterior al 2026-09-07), o la placa corre una versión anterior al arreglo: la librería MFRC522 mantiene RST en ALTO tras `PCD_Init` y lo re-pulsa cada 5 s | Mueve el cable RST a **3V3** (el firmware no conduce nada — `PIN_RC522_RST -1`) y **reflashea** con el env `esp32cam` actual. Un assert de compilación ahora prohíbe GPIO4 en cualquier pin conducido del mapa |
+| **LED rojo ENCENDIDO FIJO** (sin patrón) | O se flasheó la imagen del **lector** (`esp32dev`) en la placa CAM — esa imagen deja GPIO33 en BAJO para un zumbador (ausente), y el LED rojo es activo-BAJO — o la placa es un **clon con polaridad invertida** | Reflashea el env **`esp32cam`** (el por defecto desde ADR-010); si sigue fijo en una construcción genuina de estación, pon `PIN_STATION_LED_ACTIVE_LOW 0` en `include/config/esp32cam.h` y recompila |
+| **LED rojo destellos cortos** (1×/2×/3× cada 2 s) | NO es una falla — es la gramática del latido: 1 destello = OPERACIÓN, 2 = EMPAREJAMIENTO, 3 = degradado (cámara caída) | Léelo como la estación hablándote |
+
+La polaridad ahora es un **valor de configuración**
+(`PIN_STATION_LED_ACTIVE_LOW`, por defecto `1` = activo-BAJO, el cableado
+AI-Thinker genuino) en lugar de un supuesto enterrado — un solo define
+inverte una placa clon de polaridad invertida.
+`test/test_station_config.cpp` fija el número de pin, el rango del define
+de polaridad, los invariantes sin colisión (LED vs bus RC522 vs obturador)
+y la regla «GPIO4 nunca es un pin conducido»; `station_idle_patterns_are_mostly_off`
+adicionalmente garantiza que todo patrón de reposo permanece apagado la
+mayor parte del ciclo, así que «mayormente encendido» nunca se entrega en
+silencio.
+
 ## Entornos de compilación
 
 > Desde ADR-010 el entorno POR DEFECTO del repositorio es la **estación

@@ -25,6 +25,22 @@ static_assert(PIN_RC522_RST < 0, "station RST must stay un-driven (3V3 strap; GP
 static_assert(PIN_CAM_BUZZER < 0, "buzzer must stay absent (no free pin on this bench)");
 static_assert(PIN_SHUTTER_BUTTON == 12, "shutter must be GPIO12 (to GND, never 3V3)");
 
+// --- station LED (TASK-010 LED follow-up: the unexpected-LED fix, pinned) ---
+// Polarity is a CONFIG value now (inverted-polarity clone boards flip one
+// define; genuine AI-Thinker is active-LOW). The pin must stay GPIO33 and
+// must never collide with the RC522 bus or the shutter.
+static_assert(PIN_STATION_LED == 33, "station LED must be GPIO33 (red LED)");
+static_assert(PIN_STATION_LED_ACTIVE_LOW == 0 || PIN_STATION_LED_ACTIVE_LOW == 1,
+              "station LED polarity must be 0 (active-HIGH) or 1 (active-LOW)");
+static_assert(PIN_STATION_LED != PIN_RC522_SS && PIN_STATION_LED != PIN_RC522_SCK
+                  && PIN_STATION_LED != PIN_RC522_MOSI && PIN_STATION_LED != PIN_RC522_MISO
+                  && PIN_STATION_LED != PIN_SHUTTER_BUTTON,
+              "station LED pin collides with another driven pin");
+static_assert(PIN_STATION_LED != 4 && PIN_RC522_SS != 4 && PIN_RC522_SCK != 4
+                  && PIN_RC522_MOSI != 4 && PIN_RC522_MISO != 4 && PIN_RC522_RST != 4
+                  && PIN_SHUTTER_BUTTON != 4,
+              "GPIO4 is the onboard FLASH LED — no firmware pin may drive it");
+
 // --- camera bus spot-checks (AI-Thinker map must survive refactors) ---------
 static_assert(Y2_GPIO_NUM == 5, "camera Y2");
 static_assert(XCLK_GPIO_NUM == 0, "camera XCLK");
@@ -36,6 +52,25 @@ static void station_capture_success_has_solid_pattern() {
     TEST_ASSERT_FALSE(pattern.empty());
     TEST_ASSERT_EQUAL_size_t(1, pattern.size());
     TEST_ASSERT_TRUE(pattern[0].on);
+}
+
+// TASK-010 (LED follow-up): every idle pattern spends the LONGEST phase
+// OFF — a healthy station's LED is dark most of the time (short blips are
+// the heartbeat grammar). If a pattern ever becomes mostly-ON, the LED
+// would read as "unexpectedly lit" and this test fails at compile-run time.
+static void station_idle_patterns_are_mostly_off() {
+    auto states = {Presence::FeedbackKind::IdleOperation,
+                   Presence::FeedbackKind::IdlePairing,
+                   Presence::FeedbackKind::StationDegraded};
+    for (auto state : states) {
+        auto pattern = Presence::modeLedPattern(state);
+        uint32_t onMs = 0, offMs = 0;
+        for (auto& phase : pattern) {
+            (phase.on ? onMs : offMs) += phase.durationMs;
+        }
+        TEST_ASSERT_TRUE(offMs > onMs);
+        TEST_ASSERT_TRUE(offMs >= 1400);   // a quiet gap of ~2 s between blips
+    }
 }
 
 static void station_degraded_pattern_is_distinct() {
@@ -52,4 +87,5 @@ static void station_degraded_pattern_is_distinct() {
 void runStationConfigTests() {
     RUN_TEST(station_capture_success_has_solid_pattern);
     RUN_TEST(station_degraded_pattern_is_distinct);
+    RUN_TEST(station_idle_patterns_are_mostly_off);
 }

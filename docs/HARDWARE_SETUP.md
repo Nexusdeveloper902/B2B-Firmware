@@ -121,6 +121,27 @@ The serial monitor prints a bilingual line for every event (see the
 `[NFC]` / `[OK]` / `[404]` / `[409]` / `[422]` / `[401]` / `[NET]` /
 `[MODE]` / `[ERR]` prefixes), so patterns and logs confirm each other.
 
+## Station LED diagnostics — "an LED is unexpectedly ON" (TASK-010 follow-up)
+
+The ESP32-CAM station has TWO LEDs and exactly three ways one can light
+"by itself". The station's red LED is the MODE+EVENT LED in one (the CAM
+board has no second free LED):
+
+| Symptom | Root cause | Fix |
+|---|---|---|
+| **White flash LED solid ON** | RC522 RST still wired to GPIO4 (pre-2026-09-07 wiring), or the board runs a pre-fix build: the MFRC522 library holds RST HIGH after `PCD_Init` and re-pulses it every 5 s | Move the RST wire to **3V3** (firmware drives nothing — `PIN_RC522_RST -1`) and **reflash** with the current `esp32cam` env. A compile-time assert now forbids GPIO4 anywhere in the driven pin map |
+| **Red LED SOLID ON** (no pattern) | Either the **reader** (`esp32dev`) image was flashed on the CAM board — that image idles GPIO33 LOW for an (absent) buzzer, and the red LED is active-LOW — or the board is an **inverted-polarity clone** | Reflash the **`esp32cam`** env (the default since ADR-010); if it is still solid on a genuine station build, set `PIN_STATION_LED_ACTIVE_LOW 0` in `include/config/esp32cam.h` and rebuild |
+| **Red LED short blips** (1×/2×/3× per 2 s) | NOT a fault — that is the heartbeat grammar: 1 blip = OPERATION, 2 = PAIRING, 3 = degraded (camera down) | Read it as the station talking to you |
+
+Polarity is now a **config value** (`PIN_STATION_LED_ACTIVE_LOW`,
+default `1` = active-LOW, the genuine AI-Thinker wiring) instead of a
+buried assumption — one define flips an inverted-polarity clone board.
+`test/test_station_config.cpp` pins the pin number, the polarity define's
+range, the no-collision invariants (LED vs RC522 bus vs shutter) and the
+"GPIO4 is never a driven pin" rule; `station_idle_patterns_are_mostly_off`
+additionally guarantees every idle pattern stays dark most of the cycle,
+so "mostly on" can never ship silently.
+
 ## Build environments
 
 > Since ADR-010 the repo's DEFAULT build env is the **camera station**

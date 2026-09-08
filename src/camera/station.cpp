@@ -44,7 +44,10 @@ long extractLongField(const String& body, const char* field) {
 
 Station::Station()
     : server_(80),
-      led_(PIN_STATION_LED, /*activeLow=*/true),
+      // TASK-010 (LED follow-up): polarity comes from the board config —
+      // one define flips inverted-polarity clone boards (see
+      // include/config/esp32cam.h + the diagnostics comment there).
+      led_(PIN_STATION_LED, PIN_STATION_LED_ACTIVE_LOW != 0),
       wifi_(WIFI_SSID, WIFI_PASSWORD, WIFI_CONNECT_TIMEOUT_MS, WIFI_RECONNECT_INTERVAL_MS),
       api_(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS),
       nfc_(PIN_RC522_SS, PIN_RC522_RST, PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI, &Serial),

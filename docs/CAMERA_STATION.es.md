@@ -30,10 +30,16 @@ va a 3V3 por ahora);
 **GPIO12 = botón a GND solamente** (strapping MTDI — nunca 3V3);
 **zumbador ausente** (`PIN_CAM_BUZZER -1`: sin pin libre en este banco);
 **SD intencionalmente sin usar** (nunca iniciar `SD_MMC`/`SD` — esos pines son el bus SPI).
-LED único de estado: rojo en **GPIO33** (activo-LOW): latido = reposo
-operación, doble = emparejar, triple = degradado (cámara/NFC/red
-caídos — la estación sigue viva y reintenta), rápido = conectando;
-sólido 1.5 s = evento de éxito.
+LED único de estado: rojo en **GPIO33** (activo-LOW — la polaridad es el
+define de configuración `PIN_STATION_LED_ACTIVE_LOW` desde el seguimiento
+LED de TASK-010; ponlo en `0` en placas clon con polaridad invertida):
+latido = reposo operación, doble = emparejar, triple = degradado
+(cámara/NFC/red caídos — la estación sigue viva y reintenta), rápido =
+conectando; sólido 1.5 s = evento de éxito. El LED descansa APAGADO entre
+destellos — si el tuyo queda fijo encendido, mira la tabla de diagnóstico
+en [HARDWARE_SETUP.es.md](HARDWARE_SETUP.es.md) §«Diagnóstico de LED de la
+estación» (imagen de destino equivocado, clon de polaridad, o cableado
+GPIO4 anterior al arreglo).
 
 ## Qué hace este firmware
 

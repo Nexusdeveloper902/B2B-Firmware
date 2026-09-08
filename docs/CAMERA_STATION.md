@@ -31,10 +31,15 @@ to 3V3 for now);
 **buzzer absent** (`PIN_CAM_BUZZER -1`: no free pin on this bench);
 **SD card intentionally unused**
 (never init `SD_MMC`/`SD` — the slot's pins are the SPI bus now).
-Single status LED: red on **GPIO33** (active-LOW): heartbeat =
+Single status LED: red on **GPIO33** (active-LOW — polarity is the
+`PIN_STATION_LED_ACTIVE_LOW` config define since the TASK-010 LED
+follow-up; flip it to `0` on inverted-polarity clone boards): heartbeat =
 operation idle, double-blip = pairing, triple-blip = degraded
 (camera/NFC/net down — station stays alive and retries), rapid =
-connecting; solid 1.5 s = success event.
+connecting; solid 1.5 s = success event. The LED idles DARK between
+blips — if yours reads solid ON, see the diagnostics table in
+[HARDWARE_SETUP.md](HARDWARE_SETUP.md) §"Station LED diagnostics"
+(wrong-target image, polarity clone, or pre-fix GPIO4 wiring).
 
 ## What this firmware does
 

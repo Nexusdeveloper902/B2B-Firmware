@@ -31,8 +31,23 @@
 #define PIN_RC522_RST   -1
 
 // --- Station feedback: one LED, no buzzer ----------------------------------
-#define PIN_STATION_LED   33    // red LED, active-LOW — confirm polarity
+// TASK-010 (LED follow-up): polarity is now a CONFIG value, not a buried
+// assumption. AI-Thinker genuine boards: red LED on GPIO33 is ACTIVE-LOW
+// (ON = pin LOW). Some clone boards invert it — on those the LED sits
+// SOLID ON with the default and every pattern looks inverted. Flip this
+// one define to 0 on such a board; nothing else changes.
+#define PIN_STATION_LED              33
+#define PIN_STATION_LED_ACTIVE_LOW   1
 #define PIN_CAM_BUZZER    -1    // no free pin on this bench (GPIO4 is the flash LED)
+
+// --- LED diagnostics quick reference (full table in docs/HARDWARE_SETUP.md) -
+//   white flash LED solid ON → pre-2026-09-07 build or RC522 RST still
+//       wired to GPIO4 (it must be strapped to 3V3);
+//   red LED SOLID ON → either the esp32dev (reader) image was flashed on
+//       the CAM board (that image idles GPIO33 LOW for a buzzer) or the
+//       board is an inverted-polarity clone → PIN_STATION_LED_ACTIVE_LOW 0;
+//   red LED short blips (1×/2×/3× per 2 s) → NORMAL heartbeat grammar,
+//       not a fault (1 = operating, 2 = pairing, 3 = degraded).
 
 // --- Shutter button ---------------------------------------------------------
 #define PIN_SHUTTER_BUTTON  12   // active-LOW to GND — confirm wiring
