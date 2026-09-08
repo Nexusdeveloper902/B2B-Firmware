@@ -2,7 +2,8 @@
  * StationLed.h — one-pin FeedbackController for the ESP32-CAM station.
  *
  * The CAM board has a single usable LED (red, GPIO33, active-LOW):
- * GPIO25/26 are camera VSYNC/SIOD and GPIO4 is RC522 RST. One pin
+ * GPIO25/26 are camera VSYNC/SIOD and GPIO4 is the onboard flash LED
+ * (firmware leaves it alone; RC522 RST is strapped to 3V3). One pin
  * carries both channels by precedence: a one-shot event preempts the
  * continuous state, which resumes when the event finishes. Patterns
  * come from FeedbackPatterns — no new blink vocabulary here.

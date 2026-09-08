@@ -94,7 +94,7 @@ private:
     void handleCaptureCommand(const CaptureCommand& cmd);
     void expireStaleTransactions(uint32_t now);  // anti-steal timeouts
     void reportUpload(const char* what, int status, const String& body, bool transportOk);
-    void chirpSuccess();  // no-op while PIN_CAM_BUZZER is -1 (GPIO4 = RC522 RST)
+    void chirpSuccess();  // no-op while PIN_CAM_BUZZER is -1 (no free pin on this bench)
 
     // --- visualizer ---------------------------------------------------------
     void setupRoutes();
@@ -116,6 +116,7 @@ private:
     Mode* mode_;
     ModeConsole console_;
     LineBuffer lines_;
+    bool prevSerialWasCR_ = false;  // CRLF collapse: \n right after \r is one Enter
     TerminalCaptureTrigger trigger_;
     ButtonCaptureTrigger shutter_;
 

@@ -2,13 +2,14 @@
  * config/esp32cam.h — STATION board (env `esp32cam`): AI-Thinker ESP32-CAM
  * (OV3660) with camera + RC522 aboard. THE authoritative CAM hardware map.
  *
- *   RC522:  SDA/SS → 13 | SCK → 14 | MOSI → 15 | MISO → 2 | RST → 4
- *           (bench-verified 2026-09-07: DIAG-CAM VersionReg 0x92 stable
- *           + raw SPI agree. Those five double as the SD-slot pins; the
+ *   RC522:  SDA/SS → 13 | SCK → 14 | MOSI → 15 | MISO → 2 | RST → 3V3
+ *           (bench temp: RST strapped to 3V3, soft reset only —
+ *           PIN_RC522_RST stays -1 so the firmware never drives a pin
+ *           for it. SCK/MOSI/MISO/SS double as the SD-slot pins; the
  *           SD card is intentionally unused — never init SD_MMC/SD.)
+ *   GPIO4:  ONBOARD FLASH LED — NEVER drive it (firmware leaves it alone).
  *   PSRAM:  GPIO16/17 RESERVED — never use 16 for RC522 RST.
- *   Buzzer: ABSENT (-1). GPIO4 is RC522 RST; a buzzer idling LOW would
- *           hold the active-LOW RC522 reset forever. Re-enable ONLY on a
+ *   Buzzer: ABSENT (-1). No free pin on this bench — re-enable ONLY on a
  *           genuinely free pin.
  *   LEDs:   single red LED on GPIO33 (active-LOW on AI-Thinker). GPIO25/26
  *           are camera VSYNC/SIOD — not LEDs on this board.
@@ -24,11 +25,14 @@
 #define PIN_RC522_MISO  2
 #define PIN_RC522_MOSI  15
 #define PIN_RC522_SS    13
-#define PIN_RC522_RST   4
+// Bench temp: RC522 RST strapped to 3V3 (soft reset only) — GPIO4 is the
+// onboard flash LED and must not be driven. The MFRC522 library treats
+// 255 (UINT8_MAX, UNUSED_PIN) as "no RST pin"; (uint8_t)-1 is exactly that.
+#define PIN_RC522_RST   -1
 
 // --- Station feedback: one LED, no buzzer ----------------------------------
 #define PIN_STATION_LED   33    // red LED, active-LOW — confirm polarity
-#define PIN_CAM_BUZZER    -1    // keep -1 while RC522 RST is on GPIO4
+#define PIN_CAM_BUZZER    -1    // no free pin on this bench (GPIO4 is the flash LED)
 
 // --- Shutter button ---------------------------------------------------------
 #define PIN_SHUTTER_BUTTON  12   // active-LOW to GND — confirm wiring

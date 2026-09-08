@@ -20,14 +20,16 @@ the DevKit board — see `docs/HARDWARE_SETUP.md` for that device.
 | SCK       | **14** | SPI clock (SD CLK pin, SD unused) |
 | MOSI      | **15** | SPI MOSI (SD CMD pin, SD unused) |
 | MISO      | **2**  | SPI MISO (SD DATA0 pin, SD unused) |
-| RST       | **4**  | RC522 reset (flash LED shares it — activity blinks are normal) |
+| RST       | **3V3** | RC522 reset strapped HIGH — bench temp, soft reset only (`PIN_RC522_RST -1`); GPIO4 is the flash LED, leave it alone |
 | 3.3V / VCC | 3V3  | never 5 V |
 | GND       | GND   | common ground |
 
 Reserved / forbidden: **GPIO16/17 = PSRAM** (never RC522 RST);
+**GPIO4 = onboard flash LED** (never drive it — RC522 RST is strapped
+to 3V3 for now);
 **GPIO12 = shutter to GND only** (MTDI strapping — never 3V3);
-**buzzer absent** (`PIN_CAM_BUZZER -1`: GPIO4 is RST, an idle-LOW
-buzzer would hold the RC522 in reset); **SD card intentionally unused**
+**buzzer absent** (`PIN_CAM_BUZZER -1`: no free pin on this bench);
+**SD card intentionally unused**
 (never init `SD_MMC`/`SD` — the slot's pins are the SPI bus now).
 Single status LED: red on **GPIO33** (active-LOW): heartbeat =
 operation idle, double-blip = pairing, triple-blip = degraded
@@ -45,7 +47,9 @@ connecting; solid 1.5 s = success event.
 | `c` | Local capture only (no upload — dev/visualizer use) |
 
 ENTER never multi-fires on key-repeat or buffered input (line discipline
-+ 2 s cooldown, host-tested in `test/test_capture_trigger.cpp`). The
++ 2 s cooldown, host-tested in `test/test_capture_trigger.cpp`).
+ENTER captures only on an otherwise-empty line — a CRLF pair counts as
+one Enter, so typing text + Enter never ghost-fires a capture. The
 ENTER key is the *temporary* physical trigger — the future IR sensor
 replaces it at the `CaptureTrigger` seam only (spec §37).
 
@@ -53,10 +57,10 @@ replaces it at the `CaptureTrigger` seam only (spec §37).
 resistor — internal pull-up) fires the exact same flow as ENTER
 (debounced, one photo per push, holding never refires). GPIO12 was
 chosen because the camera bus, the flash LED, and your RC522
-(13/14/15/2/4) are all elsewhere — see `config.h`. Never tie
+(13/14/15/2 + RST→3V3) are all elsewhere — see `config.h`. Never tie
 GPIO12 HIGH (boot strapping).
 
-**Buzzer:** absent on this bench (`PIN_CAM_BUZZER -1`). GPIO4 is RC522 RST (verified 2026-09-07), and a buzzer idling LOW would hold the active-LOW RC522 reset forever — so no buzzer until it moves off GPIO4. The flash LED shares GPIO4 and fires with RC522 RST activity — normal.
+**Buzzer:** absent on this bench (`PIN_CAM_BUZZER -1` — no free pin). RC522 RST is strapped to 3V3 for now (bench temp, soft reset only); GPIO4 is the onboard flash LED — never drive it.
 
 ## Provisioning
 

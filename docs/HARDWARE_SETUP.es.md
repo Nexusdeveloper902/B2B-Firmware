@@ -38,7 +38,7 @@ aliméntalo desde el pin 3V3 del ESP32, nunca desde 5 V/VIN.
 | SCK       | **14** | `PIN_RC522_SCK` (reloj VSPI) |
 | MOSI      | **15** | `PIN_RC522_MOSI` (salida de datos VSPI) |
 | MISO      | **2**  | `PIN_RC522_MISO` (entrada de datos VSPI) |
-| RST       | **4**  | `PIN_RC522_RST` (verificado en banco 2026-09-07: DIAG-CAM VersionReg 0x92 estable + raw coincide; GPIO16 es CS de PSRAM en ESP32-CAM — nunca RST) |
+| RST       | **3V3** | `PIN_RC522_RST -1` (temporal en banco: RST a HIGH, solo soft reset — GPIO4 es el LED de flash del ESP32-CAM, nunca RST; GPIO16 es CS de PSRAM — nunca RST) |
 | 3.3V / VCC | 3V3  | — |
 | GND       | GND   | — |
 

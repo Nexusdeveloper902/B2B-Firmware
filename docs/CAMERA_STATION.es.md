@@ -20,15 +20,16 @@ para la placa DevKit — ver `docs/HARDWARE_SETUP.es.md`.
 | SCK       | **14** | reloj SPI (pin CLK de SD, SD sin usar) |
 | MOSI      | **15** | MOSI SPI (pin CMD de SD, SD sin usar) |
 | MISO      | **2**  | MISO SPI (pin DATA0 de SD, SD sin usar) |
-| RST       | **4**  | reset del RC522 (el LED de flash lo comparte — destellos normales) |
+| RST       | **3V3** | reset del RC522 a HIGH — temporal en banco, solo soft reset (`PIN_RC522_RST -1`); GPIO4 es el LED de flash, no tocarlo |
 | 3.3V / VCC | 3V3  | nunca 5 V |
 | GND       | GND   | tierra común |
 
 Reservado / prohibido: **GPIO16/17 = PSRAM** (nunca RST del RC522);
+**GPIO4 = LED de flash integrado** (nunca manejarlo — el RST del RC522
+va a 3V3 por ahora);
 **GPIO12 = botón a GND solamente** (strapping MTDI — nunca 3V3);
-**zumbador ausente** (`PIN_CAM_BUZZER -1`: GPIO4 es RST, un zumbador
-en reposo LOW mantendría el RC522 en reset); **SD intencionalmente sin
-usar** (nunca iniciar `SD_MMC`/`SD` — esos pines son el bus SPI).
+**zumbador ausente** (`PIN_CAM_BUZZER -1`: sin pin libre en este banco);
+**SD intencionalmente sin usar** (nunca iniciar `SD_MMC`/`SD` — esos pines son el bus SPI).
 LED único de estado: rojo en **GPIO33** (activo-LOW): latido = reposo
 operación, doble = emparejar, triple = degradado (cámara/NFC/red
 caídos — la estación sigue viva y reintenta), rápido = conectando;
@@ -46,7 +47,9 @@ sólido 1.5 s = evento de éxito.
 
 ENTER nunca se dispara múltiple por repetición de tecla ni entrada
 amortiguada (disciplina de líneas + intervalo de 2 s, testeado en el
-host en `test/test_capture_trigger.cpp`). La tecla ENTER es el
+host en `test/test_capture_trigger.cpp`). ENTER captura solo en una
+línea por lo demás vacía — un par CRLF cuenta como un Enter, así que
+escribir texto + Enter nunca dispara una captura fantasma. La tecla ENTER es el
 disparador físico *temporal* — el futuro sensor IR la sustituye SOLO en
 la costura `CaptureTrigger` (spec §37).
 
@@ -54,10 +57,10 @@ la costura `CaptureTrigger` (spec §37).
 resistencia — pull-up interno) dispara exactamente lo mismo que ENTER
 (antirrebote, una foto por pulsación, mantenerlo no repite). GPIO12 se
 eligió porque el bus de cámara, el LED de flash y tu RC522
-(13/14/15/2/4) están en otros pines — ver `config.h`. Nunca
+(13/14/15/2 + RST→3V3) están en otros pines — ver `config.h`. Nunca
 conectes GPIO12 a HIGH (strapping de arranque).
 
-**Zumbador:** ausente en este banco (`PIN_CAM_BUZZER -1`). GPIO4 es el RST del RC522 (verificado 2026-09-07), y un zumbador en reposo LOW lo mantendría en reset para siempre — sin zumbador hasta moverlo de GPIO4. El LED de flash comparte GPIO4 y destella con la actividad del RST — normal.
+**Zumbador:** ausente en este banco (`PIN_CAM_BUZZER -1` — sin pin libre). El RST del RC522 va a 3V3 por ahora (temporal en banco, solo soft reset); GPIO4 es el LED de flash integrado — nunca manejarlo.
 
 ## Provisionamiento
 

@@ -32,6 +32,8 @@ namespace Presence {
 
 class Rc522NfcReader : public NfcReader {
 public:
+    // rstPin of -1 (255/UINT8_MAX = MFRC522 UNUSED_PIN) means RST is
+    // strapped to 3V3 — PCD_Init then uses soft reset only, no pin driven.
     explicit Rc522NfcReader(uint8_t ssPin = PIN_RC522_SS,
                             uint8_t rstPin = PIN_RC522_RST,
                             uint8_t sckPin = PIN_RC522_SCK,

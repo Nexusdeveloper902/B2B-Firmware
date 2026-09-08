@@ -497,7 +497,7 @@ void Station::handleCaptureCommand(const CaptureCommand& cmd) {
 
 void Station::chirpSuccess() {
     if (PIN_CAM_BUZZER < 0) {
-        return;  // absent on this bench: GPIO4 is RC522 RST
+        return;  // absent on this bench (no free pin; GPIO4 is the flash LED)
     }
     digitalWrite(PIN_CAM_BUZZER, HIGH);
     delay(120);
@@ -532,13 +532,23 @@ void Station::reportUpload(const char* what, int status, const String& body, boo
 // Masked echo (never print typed secrets). Empty lines are console-Ignored
 // and fall through to the capture trigger, so ENTER still captures — even
 // during a password lockout. Non-empty wrong lines are console feedback
-// only and never fire capture commands.
+// only and never fire capture commands. A CRLF pair counts as ONE Enter
+// (pollSerial drops the \n after a \r) — otherwise every typed line +
+// Enter would ghost-fire a capture on its own tail. ENTER captures only
+// when the line is otherwise empty.
 // ---------------------------------------------------------------------------
 
 void Station::pollSerial() {
     const uint32_t now = millis();
     while (Serial.available() > 0) {
         const char c = static_cast<char>(Serial.read());
+        if (c == '\n' && prevSerialWasCR_) {
+            // CRLF tail, not a second ENTER — the \r already completed
+            // the line (PlatformIO/Arduino monitors send \r\n per Enter).
+            prevSerialWasCR_ = false;
+            continue;
+        }
+        prevSerialWasCR_ = (c == '\r');
         if (c != '\n' && c != '\r') {
             Serial.print('*');  // masked echo: never print what was typed
         }

@@ -16,10 +16,13 @@ static_assert(PIN_RC522_SS == 13, "station SS must be GPIO13");
 static_assert(PIN_RC522_SCK == 14, "station SCK must be GPIO14");
 static_assert(PIN_RC522_MOSI == 15, "station MOSI must be GPIO15");
 static_assert(PIN_RC522_MISO == 2, "station MISO must be GPIO2");
-static_assert(PIN_RC522_RST == 4, "station RST must be GPIO4 (16/17 are PSRAM)");
+// Bench temp: RC522 RST strapped to 3V3 (soft reset only) — GPIO4 is the
+// onboard flash LED and must stay undriven. Restore to a free GPIO when
+// RST is wired back to the MCU.
+static_assert(PIN_RC522_RST < 0, "station RST must stay un-driven (3V3 strap; GPIO4 is the flash LED)");
 
 // --- safety invariants ------------------------------------------------------
-static_assert(PIN_CAM_BUZZER < 0, "buzzer must stay absent while RST is on GPIO4");
+static_assert(PIN_CAM_BUZZER < 0, "buzzer must stay absent (no free pin on this bench)");
 static_assert(PIN_SHUTTER_BUTTON == 12, "shutter must be GPIO12 (to GND, never 3V3)");
 
 // --- camera bus spot-checks (AI-Thinker map must survive refactors) ---------
