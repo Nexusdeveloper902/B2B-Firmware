@@ -4,10 +4,6 @@
 
 namespace Presence {
 
-const char* modeKindToString(ModeKind kind) {
-    return kind == ModeKind::Operation ? "operation" : "pairing";
-}
-
 // TASK-004: the hints below are the device teaching its own flow. The
 // "45 s" in the pairing hint mirrors the B2B-Core default
 // (presence.pairing_window_seconds, ADR-020); it is display-only

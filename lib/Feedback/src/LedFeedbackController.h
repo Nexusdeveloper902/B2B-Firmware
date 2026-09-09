@@ -20,6 +20,9 @@
 
 namespace Presence {
 
+/** Chirp length for the operation-success buzzer (was a magic 120). */
+constexpr uint32_t BUZZER_CHIRP_MS = 120;
+
 class LedFeedbackController : public FeedbackController {
 public:
     LedFeedbackController(uint8_t modeLedPin, uint8_t eventLedPin, int8_t buzzerPin = -1)
@@ -46,9 +49,13 @@ public:
     void showEvent(const FeedbackSignal& signal) override {
         eventPlayer_.start(eventLedPattern(signal.kind), /*loop=*/false);
         if (buzzerPin_ >= 0 && signal.kind == FeedbackKind::TapSuccess) {
-            // short confirmation chirp for operation successes only
-            buzzerUntilMs_ = millis() + 120;
+            // short confirmation chirp for operation successes only.
+            // Elapsed-style (start + elapsed compare): absolute
+            // millis()+120 breaks at the ~49.7-day wrap (the chirp
+            // would die at ~0 ms exactly at the wrap instant).
+            buzzerStartMs_ = millis();
             digitalWrite(buzzerPin_, HIGH);
+            buzzerActive_ = true;
         }
     }
 
@@ -65,9 +72,10 @@ public:
             digitalWrite(eventLedPin_, LOW);
         }
 
-        if (buzzerPin_ >= 0 && buzzerUntilMs_ != 0 && nowMs >= buzzerUntilMs_) {
+        if (buzzerPin_ >= 0 && buzzerActive_ &&
+            nowMs - buzzerStartMs_ >= BUZZER_CHIRP_MS) {
             digitalWrite(buzzerPin_, LOW);
-            buzzerUntilMs_ = 0;
+            buzzerActive_ = false;
         }
     }
 
@@ -78,7 +86,8 @@ private:
     FeedbackKind continuousState_ = FeedbackKind::BootConnecting;
     PatternPlayer modePlayer_;
     PatternPlayer eventPlayer_;
-    uint32_t buzzerUntilMs_ = 0;
+    uint32_t buzzerStartMs_ = 0;
+    bool buzzerActive_ = false;
 };
 
 }  // namespace Presence

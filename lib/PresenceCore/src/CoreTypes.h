@@ -23,8 +23,6 @@ enum class ModeKind {
     Pairing,    // associate a fresh card's UID with a student / emparejar
 };
 
-const char* modeKindToString(ModeKind kind);
-
 // ---------------------------------------------------------------------------
 // API calls the firmware can make / Llamadas que el firmware puede hacer
 // ---------------------------------------------------------------------------

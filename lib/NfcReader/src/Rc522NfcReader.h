@@ -68,6 +68,27 @@ public:
             return false;
         }
 
+        // Runtime health probe: "healthy" is only meaningful if it can be
+        // REVOKED. Once a boot-time probe succeeded, nothing ever re-checked
+        // the chip — a reader that died mid-day (ESD, power glitch) stayed
+        // 'healthy' forever and taps silently did nothing. A VersionReg read
+        // is one register transaction: every RC522_REINIT_INTERVAL_MS it
+        // re-verifies the chip, and a dead chip flips healthy_ so the reinit
+        // branch above takes over. Probed at the TOP of poll() — never
+        // between IsNewCardPresent and ReadCardSerial.
+        const uint32_t now = millis();
+        if (now - lastProbeMs_ >= RC522_REINIT_INTERVAL_MS) {
+            lastProbeMs_ = now;
+            version_ = mfrc522_.PCD_ReadRegister(MFRC522::PCD_Register::VersionReg);
+            if (version_ == 0x00 || version_ == 0xFF) {
+                healthy_ = false;  // chip stopped answering — reinit cadence engages
+                if (log_) {
+                    log_->println("[NFC] RC522 stopped responding at runtime — retrying / el lector dejó de responder — reintentando");
+                }
+                return false;
+            }
+        }
+
         if (!mfrc522_.PICC_IsNewCardPresent()) {
             return false;
         }
@@ -149,6 +170,7 @@ private:
     bool healthy_ = false;       // last probe answered?
     uint8_t version_ = 0;        // last VersionReg byte seen
     uint32_t lastInitAttemptMs_ = 0;
+    uint32_t lastProbeMs_ = 0;   // last runtime health probe (healthy path)
 };
 
 }  // namespace Presence

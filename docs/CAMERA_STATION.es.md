@@ -48,7 +48,7 @@ GPIO4 anterior al arreglo).
 | Toque RFID | Tap de presencia → con `awaiting_classification` + event id: auto-captura + `POST /api/v1/recycling/classify` (tarjeta-primero, una transacción) |
 | `ENTER` (línea vacía) | Captura un JPEG de alta resolución → `POST /api/v1/recycling/capture` (botella-primero: el backend retiene la imagen `awaiting_card`; **sin llamada al clasificador hasta que una tarjeta la resuelva** — puerta de costo, spec §4) |
 | `a <credential_uid>` | `POST /api/v1/recycling/captures/<última>/associate` — resuelve la última captura con esa tarjeta (evento + clasificación + puntos, B2B-Core TASK-025) |
-| `e <event_id>` | Arma modo tarjeta-primero: el PRÓXIMO `ENTER` captura y hace `POST /api/v1/recycling/classify` con ese event_id |
+| `e <event_id>` | Arma modo tarjeta-primero: auto-captura tras la espera y hace `POST /api/v1/recycling/classify` con ese event_id (`ENTER`/botón captura de inmediato) |
 | `c` | Captura local sin subir (desarrollo/visualizador) |
 
 ENTER nunca se dispara múltiple por repetición de tecla ni entrada
@@ -121,11 +121,13 @@ la estación de cámara en Wi-Fi, su monitor serial abierto.
    El tablero del panel y el escritorio del estudiante se actualizan en
    vivo (marcos WS de reciclaje, B2B-Core TASK-025 punto 6).
 
-2. **Tarjeta-primero (spec §3 Caso A).** Toca una tarjeta en la estación
-   RC522 y anota el `event_id` de su log serial; en el monitor de la
-   CÁMARA escribe `e 88`, coloca la botella, presiona **ENTER**.
-   Esperado: la subida de clasificación corre (`classify: HTTP 200`,
-   `material_class`, `points_awarded`).
+2. **Tarjeta-primero (spec §3 Caso A).** Toca una tarjeta en la estación,
+   coloca la botella en vista dentro de ~5 s (`CARD_FIRST_AUTO_CAPTURE_DELAY_MS`).
+   Esperado: la estación auto-captura y la subida de clasificación corre
+   (`classify: HTTP 200`, `material_class`, `points_awarded`).
+   Presionar **ENTER**/botón antes de la espera captura de inmediato;
+   `e <event_id>` en el monitor de la CÁMARA arma la misma auto-captura
+   sin toque físico.
 
 3. **Estados de fallo.** Un fallo de cámara/Wi-Fi/backend imprime
    `NETWORK ERROR (transport)` o el estado HTTP + el cuerpo JSON del
@@ -141,7 +143,7 @@ los ojos del operador de la referencia, conservados.
 
 ## Estado de verificación (sección de honestidad)
 
-- Verificado en el host (este repositorio): 92/92 pruebas nativas (incl. mapa de pines + feedback de estación), los
+- Verificado en el host (este repositorio): 96/96 pruebas nativas (incl. mapa de pines + feedback de estación), los
   cuatro entornos de compilación en verde (`esp32dev`, `esp32dev-mock`,
   `esp32cam`, y un checkout nuevo sin los archivos de secretos compila
   gracias a la guarda `__has_include`).

@@ -31,24 +31,31 @@ changed in `include/config.h`.
 ⚠ **Read this before wiring:** the RC522 is a 3.3 V device — power it from
 the ESP32's 3V3 pin, never 5 V/VIN.
 
-### RC522 (SPI — uses the ESP32 VSPI bus)
+### RC522 (SPI — reader board, env `esp32dev`)
 
-| RC522 pin | ESP32 GPIO | config.h constant |
+| RC522 pin | ESP32 GPIO | config constant (`include/config/esp32dev.h`) |
 |---|---|---|
-| SDA (SS)  | **13** | `PIN_RC522_SS` |
-| SCK       | **14** | `PIN_RC522_SCK` (VSPI clock) |
-| MOSI      | **15** | `PIN_RC522_MOSI` (VSPI data out) |
-| MISO      | **2**  | `PIN_RC522_MISO` (VSPI data in) |
-| RST       | **3V3** | `PIN_RC522_RST -1` (bench temp: RST strapped HIGH, soft reset only — GPIO4 is the ESP32-CAM flash LED, never RST; GPIO16 is PSRAM CS — never RST) |
+| SDA (SS)  | **5**  | `PIN_RC522_SS` |
+| SCK       | **18** | `PIN_RC522_SCK` (VSPI clock) |
+| MOSI      | **23** | `PIN_RC522_MOSI` (VSPI data out) |
+| MISO      | **19** | `PIN_RC522_MISO` (VSPI data in) |
+| RST       | **27** | `PIN_RC522_RST` (bench-verified 2026-09-07) |
 | 3.3V / VCC | 3V3  | — |
 | GND       | GND   | — |
 
+> ⚠ NOT the camera-station map: the ESP32-CAM station (default env
+> `esp32cam`) wires the RC522 differently (SS 13 / SCK 14 / MOSI 15 /
+> MISO 2 / RST strapped 3V3 — GPIO4 there is the flash LED, GPIO16 is
+> PSRAM CS) because those are the only free pins on that board. The
+> station's authoritative table lives in `docs/CAMERA_STATION.md`.
+>
 > ⚠ WIRING CONFIRMATION: all five RC522 signal pins are configurable in
-> `include/config.h` (defaults above). Some RC522 breakouts and some ESP32
-> boards use different conventions (e.g. SS=21, RST=22). If the reader is
-> not detected, the serial log prints the probed pins + expected ones in
-> the `[NFC] RC522 NOT responding (...)` line — re-check the wiring
-> against that line and adjust `config.h`.
+> `include/config/esp32dev.h` (defaults above; timing knobs live in
+> `include/config/common.h`). Some RC522 breakouts and some ESP32 boards
+> use different conventions (e.g. SS=21, RST=22). If the reader is not
+> detected, the serial log prints the probed pins + expected ones in the
+> `[NFC] RC522 NOT responding (...)` line — re-check the wiring against
+> that line and adjust the config header.
 >
 > ✅ On a healthy boot the log prints `[NFC] RC522 detected — firmware
 > version 0x92 / detectado` (0x91 = v1.0, 0x92 = v2.0, 0x90/0x88 = some
@@ -202,8 +209,8 @@ The mock build instead prints `---- type a UID + Enter ... ----`.
 
 | Library | Version | Purpose |
 |---|---|---|
-| `bblanchon/ArduinoJson` | ^7.0.0 | request/response JSON (host-testable too) |
-| `miguelbalboa/rfid` | ^1.6.4 | MFRC522/RC522 driver (env `esp32dev` only) |
+| `bblanchon/ArduinoJson` | ^7.4.3 | request/response JSON (host-testable too) |
+| `miguelbalboa/MFRC522` | ^1.4.11 | MFRC522/RC522 driver (envs `esp32dev` + `esp32cam`) |
 
 ## Timing constants (config.h)
 

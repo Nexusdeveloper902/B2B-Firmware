@@ -113,7 +113,7 @@ with `config.h` dispatching on `-DCAMERA_STATION` (`config_camera.h`
 deleted): RC522 13/14/15/2/4 (bench-verified), buzzer -1 (GPIO4 is
 RST), shutter 12→GND, status LED 33 (active-LOW), PSRAM 16/17
 reserved, no SD. Pinned by `test_station_config.cpp` (static_asserts;
-native 92/92). Default build is the station (ADR-010, supersedes
+native 96/96). Default build is the station (ADR-010, supersedes
 ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
 --esp32`. Secrets stay split (`secrets.h` vs `secrets.camera.h`).
 

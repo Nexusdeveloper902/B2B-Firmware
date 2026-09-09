@@ -27,15 +27,27 @@ constexpr framesize_t kCaptureResolution = FRAMESIZE_XGA;
 constexpr framesize_t kInitialFrameSize = FRAMESIZE_UXGA;
 
 long extractLongField(const String& body, const char* field) {
+    // Needle tolerates optional whitespace after the colon: a backend
+    // that pretty-prints (or adds a space in a refactor) must not silently
+    // break the capture-id extraction into a dead tap-to-associate flow.
     String needle = String("\"") + field + "\":";
     int at = body.indexOf(needle);
     if (at < 0) {
         return -1;
     }
     at += needle.length();
+    while (at < (int) body.length() && (body[(unsigned) at] == ' ' || body[(unsigned) at] == '\t')) {
+        at++;
+    }
     String digits;
-    while (at < (int) body.length() && (isdigit(body[(unsigned) at]) || body[(unsigned) at] == '-')) {
-        digits += body[(unsigned) at++];
+    while (at < (int) body.length()) {
+        const unsigned char ch = (unsigned char) body[(unsigned) at];
+        if (isdigit(ch) || ch == '-') {
+            digits += (char) ch;
+            at++;
+        } else {
+            break;
+        }
     }
     return digits.length() ? digits.toInt() : -1;
 }
@@ -85,11 +97,17 @@ void Station::begin() {
 
     if (strstr(WIFI_SSID, "YOUR_") != nullptr ||
         strstr(WIFI_PASSWORD, "YOUR_") != nullptr ||
-        strstr(READER_API_KEY, "00000000000000000000000000000000") != nullptr) {
+        strstr(READER_API_KEY, "00000000000000000000000000000000") != nullptr ||
+        strstr(API_BASE_URL, "localhost") != nullptr ||
+        strstr(API_BASE_URL, "127.0.0.1") != nullptr) {
         Serial.println("[EN] WARNING: secrets.camera.h still contains placeholder values —");
         Serial.println("     edit include/secrets.camera.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
+        Serial.println("     API_BASE_URL must be the BACKEND's LAN address — 'localhost' on the");
+        Serial.println("     ESP32 means the board itself, and every request would fail.");
         Serial.println("[ES] AVISO: secrets.camera.h aún tiene valores de marcador —");
         Serial.println("     edita include/secrets.camera.h (WIFI_SSID, WIFI_PASSWORD, API_BASE_URL, READER_API_KEY).");
+        Serial.println("     API_BASE_URL debe ser la dirección LAN del BACKEND — 'localhost' en el");
+        Serial.println("     ESP32 es la propia placa, y cada petición fallaría.");
     }
 
     // Camera: recoverable, never FATAL — the station retries in update().
@@ -131,7 +149,7 @@ void Station::printBanner() {
     Serial.println("================================");
     Serial.println("SERVER READY / SERVIDOR LISTO");
     Serial.println("================================");
-    Serial.print("[EN] Visualizer: http://");
+    Serial.print("[EN] Visualizer / [ES] Visualizador: http://");
     Serial.print(wifi_.ip().c_str());
     Serial.println("/");
     Serial.print("Reader impl / Implementacion: ");
@@ -142,13 +160,14 @@ void Station::printBanner() {
     Serial.println(API_BASE_URL);
     Serial.println();
     Serial.println("[EN] Serial commands / [ES] Comandos seriales:");
-    Serial.println("  TAP CARD         closes pending capture (associate) — else arms card-first, then BUTTON/ENTER captures / tocar tarjeta cierra captura pendiente — si no, arma y luego BOTÓN/ENTER captura");
+    Serial.println("  TAP CARD         closes pending capture (associate) — else arms card-first, auto-captures after a delay (BUTTON/ENTER now) / tocar tarjeta cierra captura pendiente — si no, arma y auto-captura tras la espera (BOTÓN/ENTER ya)");
     Serial.println("  ENTER            capture + upload (bottle-first if nothing armed) / capturar + subir (botella-primero si nada armado)");
     Serial.println("  a <credential_uid>  associate last capture with this card / asociar la última captura con esta tarjeta");
-    Serial.println("  e <event_id>     arm card-first classify for next ENTER / armar clasificación tarjeta-primero para el próximo ENTER");
+    Serial.println("  e <event_id>     arm card-first classify (same auto-capture) / armar clasificación tarjeta-primero (igual auto-captura)");
     Serial.println("  c                local capture only (no upload) / captura local sin subir");
     Serial.println("  BUTTON (GPIO12->GND) same as ENTER / igual que ENTER");
-    Serial.println("  MODE PASSWORD + Enter switches operation/pairing (masked, lockout-guarded)");
+    Serial.println("  MODE PASSWORD + Enter switches operation/pairing (masked, lockout-guarded) /");
+    Serial.println("  CONTRASEÑA DE MODO + Enter cambia operación/emparejamiento (enmascarada, con bloqueo)");
     Serial.printf("  Windows: tap-after-capture %lus, button-after-tap %lus / Ventanas: toque-tras-captura %lus, botón-tras-toque %lus\n",
                   (unsigned long) (PENDING_CAPTURE_TIMEOUT_MS / 1000),
                   (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000),
@@ -174,6 +193,14 @@ void Station::update() {
         handleCaptureCommand({CaptureCommand::Capture, ""});  // button == ENTER
     }
 
+    // New flow: tap → wait → auto photo. One shot per arm — a failed capture
+    // keeps the arm so BUTTON/ENTER can still retry it manually.
+    if (armedEventId_ > 0 && !autoCaptureDone_ &&
+        (now - armedAtMs_) >= CARD_FIRST_AUTO_CAPTURE_DELAY_MS) {
+        autoCaptureDone_ = true;
+        handleCaptureCommand({CaptureCommand::Capture, ""});
+    }
+
     std::string uid;
     if (nfc_.poll(uid)) {
         if (debouncer_.shouldProcess(uid, now)) {
@@ -187,6 +214,7 @@ void Station::update() {
         lastCameraAttemptMs_ = now;
         if (initializeCamera()) {
             cameraOk_ = true;
+            cameraFailures_ = 0;
             Serial.println("[CAM] recovered / cámara recuperada");
         }
     }
@@ -334,16 +362,26 @@ bool Station::captureHighResolution() {
         Serial.println("ERROR: Camera capture failed. / ERROR: la captura falló.");
         sensor->set_framesize(sensor, kStreamResolution);
         cameraBusy_ = false;
+        flagCameraFailure();
         return false;
     }
+
+    cameraFailures_ = 0;  // a good frame clears the degraded suspicion
 
     Serial.printf("Captured: %ux%u / Capturado: %ux%u\n", fb->width, fb->height,
                   fb->width, fb->height);
 
     freeLatestCapture();
 
+    // Capture buffer: PSRAM first, DRAM fallback. The camera init has an
+    // explicit no-PSRAM path (QVGA/DRAM), so a PSRAM-less board boots and
+    // streams — hard-requiring SPIRAM here would leave it permanently
+    // unable to capture ("could not allocate" on every ENTER).
     latestCapture_ = static_cast<uint8_t*>(
         heap_caps_malloc(fb->len, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
+    if (latestCapture_ == nullptr) {
+        latestCapture_ = static_cast<uint8_t*>(heap_caps_malloc(fb->len, MALLOC_CAP_8BIT));
+    }
 
     if (latestCapture_ == nullptr) {
         Serial.println("ERROR: Could not allocate capture buffer. / ERROR: no se pudo asignar el búfer.");
@@ -374,6 +412,20 @@ bool Station::captureHighResolution() {
 // Capture / upload application flow (contracts preserved)
 // ---------------------------------------------------------------------------
 
+void Station::flagCameraFailure() {
+    // Boot-time init is only half of "never FATAL-halt": the camera can
+    // also DIE at runtime (cable glitch, sensor lock-up) — fb_get keeps
+    // returning nullptr forever while cameraOk_ stayed true and the
+    // re-init cadence never engaged. Consecutive failures flip the flag,
+    // so update()'s existing recovery loop takes over.
+    cameraFailures_++;
+    if (cameraOk_ && cameraFailures_ >= CAMERA_FAILURES_BEFORE_REINIT) {
+        cameraOk_ = false;
+        Serial.printf("[CAM] %d consecutive capture failures — periodic re-init engaged / fallos consecutivos — reintento periódico activado\n",
+                      CAMERA_FAILURES_BEFORE_REINIT);
+    }
+}
+
 void Station::doCaptureAndUpload() {
     if (!captureHighResolution()) {
         return;  // capture failure IS the clear failure state (spec §8)
@@ -398,7 +450,16 @@ void Station::doCaptureAndUpload() {
                 armedEventId_, latestCapture_, latestCaptureSize_);
             HttpResponse r = api_.post("/api/v1/recycling/classify", body, CapturePayload::contentType());
             reportUpload("classify", r.status, String(r.body.c_str()), r.transportOk);
-            armedEventId_ = -1;  // one-shot: never re-classify a stale event by accident
+            if (r.transportOk && r.status == 200) {
+                armedEventId_ = -1;  // one-shot on SUCCESS only: never re-classify a stale event by accident
+            } else {
+                // Upload failure (Wi-Fi drop, backend down, 5xx): the arm
+                // STAYS (station.h contract — failures stay BUTTON/ENTER
+                // retryable), bounded by ARMED_EVENT_TIMEOUT_MS. The event
+                // is still awaiting_classification on the backend, so a
+                // retry is exactly the right next move.
+                Serial.println("[STATION] classify upload failed — arm kept, press BUTTON/ENTER to retry / subida fallida — brazo conservado, BOTÓN/ENTER reintenta");
+            }
             return;
         }
     }
@@ -446,9 +507,22 @@ void Station::doAssociate(const std::string& uid) {
     if (r.transportOk && r.status == 200) {
         backendCaptureId_ = -1;  // resolved — next tap arms a new card-first
     } else if (r.transportOk && r.status == 404) {
-        Serial.printf("[STATION] pending capture %ld gone/expired — cleared / captura %ld ausente/expirada — liberada\n",
-                      target, target);
-        backendCaptureId_ = -1;
+        // A 404 is NOT always "capture gone": the backend also 404s on an
+        // unknown/inactive CARD (mistyped 'a <uid>'), and that must keep
+        // the pending capture alive — the window stays waiting for the
+        // right card (backend spec §32). Clear the pending id only when
+        // the capture itself is gone/expired or already resolved; any
+        // other 404 keeps it (bounded by PENDING_CAPTURE_TIMEOUT_MS).
+        const bool captureGone = r.body.find("no_pending_capture") != std::string::npos;
+        const bool alreadyResolved = r.body.find("already_associated") != std::string::npos;
+        if (captureGone || alreadyResolved) {
+            Serial.printf("[STATION] pending capture %ld gone/expired — cleared / captura %ld ausente/expirada — liberada\n",
+                          target, target);
+            backendCaptureId_ = -1;
+        } else {
+            Serial.printf("[STATION] capture %ld kept — card rejected, tap the right card / captura %ld conservada — tarjeta rechazada, toca la tarjeta correcta\n",
+                          target, target);
+        }
     }
     // transport/network errors keep the pending id so the operator can retry
 }
@@ -480,12 +554,23 @@ void Station::handleCaptureCommand(const CaptureCommand& cmd) {
             doAssociate(cmd.arg);
             break;
         case CaptureCommand::ArmEvent:
+            // The trigger accepts digits-only strings — including "0" and
+            // 60-digit monsters that atol clamps. Event ids are small
+            // positive integers; anything else is a typo and must be
+            // REFUSED, or the operator waits forever for a photo that no
+            // armed state will ever produce (every consumer checks > 0).
+            if (cmd.arg.size() > 9 || atol(cmd.arg.c_str()) <= 0) {
+                Serial.println("[EN] Invalid event id — a card-first arm needs a positive event id from a tap log.");
+                Serial.println("[ES] Id de evento inválido — el modo tarjeta-primero necesita un id positivo del log.");
+                return;
+            }
             armedEventId_ = atol(cmd.arg.c_str());
             armedAtMs_ = millis();
-            Serial.printf("[EN] Armed card-first classify for event %ld (next BUTTON/ENTER captures within %lus).\n",
-                          armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
-            Serial.printf("[ES] Armada clasificación tarjeta-primero para el evento %ld (el próximo BOTÓN/ENTER captura dentro de %lus).\n",
-                          armedEventId_, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
+            autoCaptureDone_ = false;
+            Serial.printf("[EN] Armed card-first classify for event %ld (auto-captures in %lus, BUTTON/ENTER now).\n",
+                          armedEventId_, (unsigned long) (CARD_FIRST_AUTO_CAPTURE_DELAY_MS / 1000));
+            Serial.printf("[ES] Armada clasificación tarjeta-primero para el evento %ld (auto-captura en %lus, BOTÓN/ENTER ya).\n",
+                          armedEventId_, (unsigned long) (CARD_FIRST_AUTO_CAPTURE_DELAY_MS / 1000));
             break;
         case CaptureCommand::LocalOnly:
             captureHighResolution();
@@ -578,6 +663,22 @@ void Station::dispatchSerialLine(const std::string& line, uint32_t now) {
         return;
     }
 
+    // COMMAND GRAMMAR FIRST: a command-shaped line (c / a <uid> /
+    // e <id>) is dispatched as a capture command; the trigger answers
+    // None for anything else (the mode password included), and only
+    // then does the password console judge the line. The previous order
+    // (console first) made ModeConsole treat EVERY non-empty line as a
+    // password attempt — the documented a/e/c commands printed "wrong
+    // password", poisoned the lockout counter, and never reached the
+    // parser below. Ambiguity note: a mode password that collides with
+    // the command grammar (e.g. literally "c") is consumed as the
+    // command — pick a password outside those shapes.
+    CaptureCommand cmd = trigger_.feedLine(line);
+    if (cmd.kind != CaptureCommand::None) {
+        handleCaptureCommand(cmd);
+        return;
+    }
+
     const ConsoleResult result = console_.handleLine(line, now);
     switch (result) {
         case ConsoleResult::Accepted:
@@ -604,19 +705,7 @@ void Station::dispatchSerialLine(const std::string& line, uint32_t now) {
             return;
         case ConsoleResult::Ignored:
         default:
-            break;
-    }
-
-    // Not a password attempt outcome — parse as a capture command line.
-    for (char c : line) {
-        CaptureCommand cmd = trigger_.feed(c);
-        if (cmd.kind != CaptureCommand::None) {
-            handleCaptureCommand(cmd);
-        }
-    }
-    CaptureCommand cmd = trigger_.feed('\n');
-    if (cmd.kind != CaptureCommand::None) {
-        handleCaptureCommand(cmd);
+            return;  // nothing else can claim a non-empty line
     }
 }
 
@@ -709,25 +798,35 @@ void Station::handleCardTap(const std::string& uid) {
         }
         led_.showEvent(signal);
 
-        // Station transaction (card-first, manual): identity resolved AND
-        // the backend wants a photo for this event → ARM it. The NEXT
-        // button/ENTER press captures+classifies (doCaptureAndUpload consumes
-        // armedEventId_ one-shot). No auto-capture here: the operator frames
-        // the bottle then presses the shutter.
+        // Station transaction (card-first, auto): identity resolved AND
+        // the backend wants a photo for this event → ARM it. update()
+        // auto-captures+classifies once the delay elapses
+        // (doCaptureAndUpload consumes armedEventId_ one-shot);
+        // BUTTON/ENTER captures immediately without waiting.
         if (result.outcome == TapOutcome::Success && result.awaitingClassification &&
             result.eventId > 0) {
             // No bottle pending here (early-return above associates it), so
             // this tap is a pure card-first arm.
-            if (armedEventId_ > 0 && armedEventId_ != result.eventId) {
-                Serial.printf("[STATION] overwriting armed event %ld with %ld / reemplazando evento armado %ld con %ld\n",
+            if (armedEventId_ == result.eventId) {
+                // Re-tap of the SAME event (backend dedup, or a retry after
+                // a failed upload): keep the current arm exactly as it is.
+                // Re-arming would reset autoCaptureDone_ and re-classify an
+                // event that may already be classified.
+                Serial.printf("[STATION] event %ld already armed — capture pending, no re-arm / evento %ld ya armado — captura pendiente, sin rearme\n",
+                              (long) result.eventId, (long) result.eventId);
+                return;
+            }
+            if (armedEventId_ > 0) {
+                Serial.printf("[STATION] overwriting armed event %ld with %ld (the old one expires server-side unclassified) / reemplazando evento armado %ld con %ld\n",
                               (long) armedEventId_, (long) result.eventId,
                               (long) armedEventId_, (long) result.eventId);
             }
             armedEventId_ = result.eventId;
             armedAtMs_ = millis();
-            Serial.printf("[STATION] card-first armed for event %ld — press BUTTON/ENTER within %lus to capture / armado para el evento %ld — presiona BOTÓN/ENTER dentro de %lus para capturar\n",
-                          (long) result.eventId, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000),
-                          (long) result.eventId, (unsigned long) (ARMED_EVENT_TIMEOUT_MS / 1000));
+            autoCaptureDone_ = false;
+            Serial.printf("[STATION] card-first armed for event %ld — auto-capture in %lus (BUTTON/ENTER now) / armado para el evento %ld — auto-captura en %lus (BOTÓN/ENTER ya)\n",
+                          (long) result.eventId, (unsigned long) (CARD_FIRST_AUTO_CAPTURE_DELAY_MS / 1000),
+                          (long) result.eventId, (unsigned long) (CARD_FIRST_AUTO_CAPTURE_DELAY_MS / 1000));
         }
     } else {  // ApiCallType::PairCard
         PairResult result = parsePairResponse(response.status, response.body);

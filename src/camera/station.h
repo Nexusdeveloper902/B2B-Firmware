@@ -17,8 +17,9 @@
  * capture is pending (awaiting_card): then the tap UID associates that
  * capture directly (no new event). Otherwise, when the backend answers
  * next_step awaiting_classification with an event id, the station ARMS
- * that event — the NEXT button/ENTER press captures+classifies
- * (card-first, manual). A button/ENTER with nothing armed stays
+ * that event — update() auto-captures+classifies once
+ * CARD_FIRST_AUTO_CAPTURE_DELAY_MS elapses (card-first, auto;
+ * BUTTON/ENTER captures immediately). A button/ENTER with nothing armed stays
  * bottle-first (capture → hold awaiting_card → tap/`a <uid>` associates).
  * Pairing mode, console password, debounce, Bearer auth and
  * multipart wire bytes are reused unchanged from the existing libs.
@@ -89,6 +90,7 @@ private:
     // --- capture / upload (moved from the camera station, intact) ---------
     void freeLatestCapture();
     bool captureHighResolution();
+    void flagCameraFailure();  // repeated runtime fb_get failures → re-init path
     void doCaptureAndUpload();
     void doAssociate(const std::string& uid);
     void handleCaptureCommand(const CaptureCommand& cmd);
@@ -129,10 +131,12 @@ private:
     uint32_t backendCaptureAtMs_ = 0;  // when the pending capture was stored
     long armedEventId_ = -1;
     uint32_t armedAtMs_ = 0;  // when the card-first event was armed
+    bool autoCaptureDone_ = false;  // auto photo fired once per arm (failures stay BUTTON-retryable)
 
     // recoverable subsystem state (STEP 8: never FATAL-halt)
     bool cameraOk_ = false;
     uint32_t lastCameraAttemptMs_ = 0;
+    int cameraFailures_ = 0;  // consecutive fb_get failures → CAMERA_FAILURES_BEFORE_REINIT flips cameraOk_
     FeedbackKind lastIndicated_ = FeedbackKind::BootConnecting;
 };
 

@@ -22,3 +22,7 @@ Thumbs.db
 # Local scratch
 *.bak
 *.tmp
+
+# Mimosa security-scan tool state (2026-09-09 audits)
+/.mimosa/
+**/.mimosa/

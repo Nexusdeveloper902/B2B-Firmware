@@ -48,7 +48,7 @@ blips — if yours reads solid ON, see the diagnostics table in
 | RFID card tap | Presence tap → on `awaiting_classification` + event id: auto-capture + `POST /api/v1/recycling/classify` (card-first, one transaction) |
 | `ENTER` (empty line) | Capture a high-res JPEG → `POST /api/v1/recycling/capture` (bottle-first: the backend holds the image `awaiting_card`; **no classifier call until a card resolves it** — the spec §4 cost gate) |
 | `a <credential_uid>` | `POST /api/v1/recycling/captures/<last>/associate` — resolve the last capture with that card (event + classification + points, B2B-Core TASK-025) |
-| `e <event_id>` | Arm card-first mode: the NEXT `ENTER` captures and `POST /api/v1/recycling/classify` with that event_id |
+| `e <event_id>` | Arm card-first mode: auto-captures after the delay and `POST /api/v1/recycling/classify` with that event_id (`ENTER`/button captures immediately) |
 | `c` | Local capture only (no upload — dev/visualizer use) |
 
 ENTER never multi-fires on key-repeat or buffered input (line discipline
@@ -120,11 +120,13 @@ the camera station on Wi-Fi, its serial monitor open.
    The dashboard's leaderboard and the student's own desk update live
    (recycling WS frames, B2B-Core TASK-025 item 6).
 
-2. **Card-first (spec §3 Case A).** Tap a card on the RC522 station and
-   note the `event_id` in its serial log, then on the CAMERA monitor
-   type `e 88`, place the bottle, press **ENTER**. Expected: the
-   classify upload runs (`classify: HTTP 200`, `material_class`,
-   `points_awarded`).
+2. **Card-first (spec §3 Case A).** Tap a card on the station, place the
+   bottle in view within ~5 s (`CARD_FIRST_AUTO_CAPTURE_DELAY_MS`).
+   Expected: the station auto-captures and the classify upload runs
+   (`classify: HTTP 200`, `material_class`, `points_awarded`).
+   Pressing **ENTER**/button before the delay captures immediately;
+   `e <event_id>` on the CAMERA monitor arms the same auto-capture
+   without a physical tap.
 
 3. **Failure states.** A camera/Wi-Fi/backend failure prints
    `NETWORK ERROR (transport)` or the HTTP status + backend JSON body
@@ -140,7 +142,7 @@ operator eyes, preserved.
 
 ## Verification status (honesty section)
 
-- Host-verified (this repository): 92/92 native tests (incl. station pin map + station feedback), all four build
+- Host-verified (this repository): 96/96 native tests (incl. station pin map + station feedback), all four build
   environments green (`esp32dev`, `esp32dev-mock`, `esp32cam`, fresh
   checkout without the secrets files compiles via the `__has_include` guard).
 - Bench-verified by the owner: the flow above, against real hardware —

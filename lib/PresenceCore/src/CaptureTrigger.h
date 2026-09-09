@@ -104,6 +104,17 @@ public:
 
     CaptureCommand feed(char c) override;
 
+    /** Feed a WHOLE line (chars + terminating '\n'), mirroring a pasted
+     *  burst or a serial dispatcher handing over one buffered line.
+     *  Returns the command the line completes into (else .kind == None).
+     *  This is the routing primitive for a device that shares its serial
+     *  line with a mode-password console: a command-shaped line (ENTER /
+     *  a <uid> / e <id> / c) yields a CaptureCommand; ANY other line
+     *  (the mode password) yields None and is the console's to judge.
+     *  That precedence is host-tested here — the exact bug class that
+     *  once made the station's commands dead code. */
+    CaptureCommand feedLine(const std::string& line);
+
     /** Trailing characters without a newline are NOT a command (a
      *  half-typed line must never fire on the next burst). */
     ~TerminalCaptureTrigger() override = default;

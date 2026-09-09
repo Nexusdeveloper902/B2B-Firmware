@@ -110,7 +110,7 @@ lib/NfcReader/            interfaz NfcReader + RC522 + simulador serial
 lib/Feedback/             interfaz FeedbackController + implementación LED
 lib/ApiClient/            interfaz ApiClient + transporte HTTPClient ESP32
 lib/WifiService/          conexión acotada + reconexión no bloqueante
-test/                     pruebas unitarias nativas en el host (65)
+test/                     pruebas unitarias nativas en el host (96)
 tools/e2e/                arnés E2E: payloads y parser del firmware vs backend real
 scripts/e2e_backend.sh    E2E de integración con el backend (BD desechable, HTTP real)
 scripts/flash.sh          envoltorio de flasheo por placa (estación | lector | simulado)

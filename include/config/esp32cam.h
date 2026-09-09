@@ -54,16 +54,22 @@
 #define SHUTTER_DEBOUNCE_MS 50   // contact-settle window per press
 
 // --- Recycling transaction windows (anti-steal timeouts, relaxed) -----------
-// Bottle-first: BUTTON capture → tap window. Card-first: tap → BUTTON window.
-// Shorter than the backend's 300 s hold so a stray next person can't claim
-// your bottle, but long enough to tap relaxed. Wrap-safe millis() compares.
+// Bottle-first: BUTTON capture → tap window. Card-first: tap → auto-capture
+// after the delay below (BUTTON/ENTER captures immediately). Shorter than
+// the backend's 300 s hold so a stray next person can't claim your bottle,
+// but long enough to tap relaxed. Wrap-safe millis() compares.
 #define PENDING_CAPTURE_TIMEOUT_MS 90000  // 90 s to tap after bottle capture
-#define ARMED_EVENT_TIMEOUT_MS     90000  // 90 s to press BUTTON after tap
+#define ARMED_EVENT_TIMEOUT_MS     90000  // 90 s outer limit for a card-first arm
+#define CARD_FIRST_AUTO_CAPTURE_DELAY_MS 5000  // tap → wait → auto photo (place the bottle)
 
 // --- Camera recovery: init is heavy (sensor + PSRAM frame buffers), so a
-// failed camera retries on a slower cadence than the RC522. millis()-based,
+// failed camera retries on a slower cadence than the RC522. Runtime death
+// (fb_get keeps failing after a working boot) is detected by consecutive
+// capture failures: CAMERA_FAILURES_BEFORE_REINIT in a row flips the
+// healthy flag so this same re-init cadence engages. millis()-based,
 // non-blocking; the station stays alive meanwhile.
 #define CAMERA_REINIT_INTERVAL_MS 30000
+#define CAMERA_FAILURES_BEFORE_REINIT 3  // consecutive fb_get failures before re-init
 
 // --- Camera bus pin map (AI-Thinker, from the verified reference) ----------
 #define PWDN_GPIO_NUM     32

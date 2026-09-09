@@ -34,20 +34,27 @@ aliméntalo desde el pin 3V3 del ESP32, nunca desde 5 V/VIN.
 
 | Pin RC522 | GPIO ESP32 | constante en config.h |
 |---|---|---|
-| SDA (SS)  | **13** | `PIN_RC522_SS` |
-| SCK       | **14** | `PIN_RC522_SCK` (reloj VSPI) |
-| MOSI      | **15** | `PIN_RC522_MOSI` (salida de datos VSPI) |
-| MISO      | **2**  | `PIN_RC522_MISO` (entrada de datos VSPI) |
-| RST       | **3V3** | `PIN_RC522_RST -1` (temporal en banco: RST a HIGH, solo soft reset — GPIO4 es el LED de flash del ESP32-CAM, nunca RST; GPIO16 es CS de PSRAM — nunca RST) |
+| SDA (SS)  | **5**  | `PIN_RC522_SS` |
+| SCK       | **18** | `PIN_RC522_SCK` (reloj VSPI) |
+| MOSI      | **23** | `PIN_RC522_MOSI` (salida de datos VSPI) |
+| MISO      | **19** | `PIN_RC522_MISO` (entrada de datos VSPI) |
+| RST       | **27** | `PIN_RC522_RST` (verificado en banco 2026-09-07) |
 | 3.3V / VCC | 3V3  | — |
 | GND       | GND   | — |
 
+> ⚠ NO es el mapa de la estación de cámara: la estación ESP32-CAM (entorno
+> por defecto `esp32cam`) cablea el RC522 distinto (SS 13 / SCK 14 /
+> MOSI 15 / MISO 2 / RST a 3V3 — GPIO4 ahí es el LED de flash, GPIO16 es
+> CS de PSRAM) porque son los únicos pines libres de esa placa. La tabla
+> autoritativa de la estación vive en `docs/CAMERA_STATION.es.md`.
+>
 > ⚠ CONFIRMACIÓN DE CABLEADO: las cinco señales del RC522 son
-> configurables en `include/config.h` (valores por defecto arriba).
-> Algunos módulos RC522 y algunas placas ESP32 usan convenciones distintas
-> (p. ej. SS=21, RST=22). Si el lector no se detecta, el registro serial
-> imprime los pines esperados en la línea `[NFC] RC522 NOT responding
-> (...)` — contrasta el cableado con esa línea y ajusta `config.h`.
+> configurables en `include/config/esp32dev.h` (valores por defecto
+> arriba; los tiempos viven en `include/config/common.h`). Algunos módulos
+> RC522 y algunas placas ESP32 usan convenciones distintas (p. ej. SS=21,
+> RST=22). Si el lector no se detecta, el registro serial imprime los
+> pines esperados en la línea `[NFC] RC522 NOT responding (...)` —
+> contrasta el cableado con esa línea y ajusta el header de config.
 >
 > ✅ En un arranque sano el registro imprime `[NFC] RC522 detected —
 > firmware version 0x92 / detectado` (0x91 = v1.0, 0x92 = v2.0,
@@ -210,8 +217,8 @@ El build simulado en cambio imprime `---- type a UID + Enter ... ----`.
 
 | Librería | Versión | Propósito |
 |---|---|---|
-| `bblanchon/ArduinoJson` | ^7.0.0 | JSON de peticiones/respuestas (también testeable en host) |
-| `miguelbalboa/rfid` | ^1.6.4 | driver MFRC522/RC522 (solo entorno `esp32dev`) |
+| `bblanchon/ArduinoJson` | ^7.4.3 | JSON de peticiones/respuestas (también testeable en host) |
+| `miguelbalboa/MFRC522` | ^1.4.11 | driver MFRC522/RC522 (entornos `esp32dev` + `esp32cam`) |
 
 ## Constantes de tiempo (config.h)
 

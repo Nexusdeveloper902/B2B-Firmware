@@ -42,9 +42,6 @@ public:
      * Construye la llamada HTTP que este modo hace para un UID leído.
      */
     virtual ApiCall onCardTap(const std::string& credentialUid) = 0;
-
-    /** Which call type this mode issues (for dispatching the response). */
-    virtual ApiCallType callType() const = 0;
 };
 
 }  // namespace Presence

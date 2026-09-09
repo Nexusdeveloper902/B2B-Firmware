@@ -36,6 +36,17 @@ CaptureCommand TerminalCaptureTrigger::feed(char c) {
     return {};
 }
 
+CaptureCommand TerminalCaptureTrigger::feedLine(const std::string& line) {
+    CaptureCommand cmd;
+    for (char c : line) {
+        cmd = feed(c);
+        if (cmd.kind != CaptureCommand::None) {
+            return cmd;  // defensive: a command before '\n' is never expected
+        }
+    }
+    return feed('\n');
+}
+
 CaptureCommand TerminalCaptureTrigger::handleLine(const std::string& raw) {
     // Trim surrounding whitespace (tolerant of terminal padding).
     size_t begin = raw.find_first_not_of(" \t");
@@ -88,8 +99,10 @@ CaptureCommand TerminalCaptureTrigger::handleLine(const std::string& raw) {
         return {};
     }
 
-    return {};  // unknown line — including the mode password, which the
-                // reader firmware owns; the camera station has no modes.
+    return {};  // unknown line — NOT a capture command. On a device that
+                // shares the serial line with a mode-password console
+                // (reader + station), the dispatcher hands this line to
+                // the password console; grammar-first keeps both alive.
 }
 
 ButtonCaptureTrigger::ButtonCaptureTrigger(Level pressed, Clock clock,

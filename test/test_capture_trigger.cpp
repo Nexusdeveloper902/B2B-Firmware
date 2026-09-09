@@ -242,6 +242,50 @@ static void button_release_then_press_fires_again() {
     TEST_ASSERT_TRUE(b.poll());
 }
 
+
+// --- feedLine: the station's dispatch routing primitive -------------------
+// The camera station shares one serial line between the capture commands
+// and the mode-password console. The dispatcher MUST try the command
+// grammar first and hand only unrecognized lines to the password console
+// — the reversed order once made a/e/c unreachable (they were eaten as
+// wrong-password attempts, poisoning the lockout).
+
+void feedLine_routes_command_lines_to_the_trigger() {
+    fakeNow = 0;
+    TerminalCaptureTrigger t = makeTrigger();
+
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::Capture, t.feedLine("").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::Associate, t.feedLine("a A1B2C3D4E5F6").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::ArmEvent, t.feedLine("e 88").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::LocalOnly, t.feedLine("c").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::LocalOnly, t.feedLine("C").kind);
+}
+
+void feedLine_hands_non_command_lines_to_the_console() {
+    fakeNow = 0;
+    TerminalCaptureTrigger t = makeTrigger();
+
+    // Password-shaped lines yield None — the dispatcher's signal to give
+    // the line to the mode console instead.
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("hunter2").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("correct horse battery staple").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("a").kind);          // 'a' without a uid
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("e").kind);          // 'e' without an id
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("e -5").kind);       // not digits-only
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("e 12x9").kind);     // not digits-only
+}
+
+void feedLine_leaves_no_residue_after_an_unknown_line() {
+    fakeNow = 0;
+    TerminalCaptureTrigger t = makeTrigger();
+
+    // A password attempt flows through the trigger's line buffer on its
+    // way to the console — the next ENTER afterwards must still be a
+    // clean capture, not a half-parsed garbage command.
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::None, t.feedLine("wrong-pw").kind);
+    TEST_ASSERT_EQUAL_INT(CaptureCommand::Capture, t.feedLine("").kind);
+}
+
 void runCaptureTriggerTests() {
     RUN_TEST(enter_line_triggers_capture);
     RUN_TEST(associate_line_parses_the_uid);
@@ -259,4 +303,7 @@ void runCaptureTriggerTests() {
     RUN_TEST(button_hold_never_refires);
     RUN_TEST(button_bounce_fires_once);
     RUN_TEST(button_release_then_press_fires_again);
+    RUN_TEST(feedLine_routes_command_lines_to_the_trigger);
+    RUN_TEST(feedLine_hands_non_command_lines_to_the_console);
+    RUN_TEST(feedLine_leaves_no_residue_after_an_unknown_line);
 }

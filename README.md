@@ -107,7 +107,7 @@ lib/NfcReader/            NfcReader interface + RC522 + serial mock
 lib/Feedback/             FeedbackController interface + LED implementation
 lib/ApiClient/            ApiClient interface + ESP32 HTTPClient transport
 lib/WifiService/          bounded connect + non-blocking reconnect
-test/                     host-side native unit tests (65)
+test/                     host-side native unit tests (96)
 tools/e2e/                E2E harness: firmware payloads + parser vs real backend
 scripts/e2e_backend.sh    backend integration E2E (throwaway DB, real HTTP)
 scripts/flash.sh          per-board flash wrapper (station | reader | mock)
