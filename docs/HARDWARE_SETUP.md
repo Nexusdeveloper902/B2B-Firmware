@@ -1,4 +1,4 @@
-# Hardware Setup — Presence Platform Reader (ESP32 + RC522)
+# Hardware Setup — Pulse Reader (ESP32 + RC522)
 
 > También disponible en: [Español](HARDWARE_SETUP.es.md)
 

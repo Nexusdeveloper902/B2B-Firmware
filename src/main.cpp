@@ -2,7 +2,7 @@
  * main.cpp — thin wiring of the firmware's swappable parts.
  * main.cpp — cablegado delgado de las partes intercambiables del firmware.
  *
- * Presence Platform — Reader Firmware (ESP32, PlatformIO, Arduino framework)
+ * Pulse — Reader Firmware (ESP32, PlatformIO, Arduino framework)
  * Task: TASK-001-reader-firmware-mvp
  *
  * The three-way interface split (NfcReader / Mode / FeedbackController)
@@ -107,7 +107,7 @@ static Mode* mode = nullptr;  // boots OPERATION; toggled by the console passwor
 static void printBanner() {
     Serial.println();
     Serial.println("==============================================");
-    Serial.println(" Presence Platform — NFC Reader / Lector NFC");
+    Serial.println(" Pulse — NFC Reader / Lector NFC");
     Serial.println("==============================================");
     Serial.print("Reader impl / Implementacion: ");
     Serial.println(reader.label());

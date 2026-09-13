@@ -1,9 +1,9 @@
-# Presence Platform — Reader Firmware (ESP32)
+# Pulse — Reader Firmware (ESP32)
 
 > Also available in: [Español](README.es.md)
 > Companion repos: [B2B-Core](https://github.com/Nexusdeveloper902/B2B-Core) (backend — read-only reference except the TASK-010 pairing endpoint)
 
-ESP32 firmware for the physical NFC card readers of the Presence Platform,
+ESP32 firmware for the physical NFC card readers of Pulse,
 built as a **PlatformIO project** for the **Arduino framework**. Each
 reader makes an authenticated HTTP call to the B2B-Core backend — the same
 call a human would previously have sent from Postman. The backend needs

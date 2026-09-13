@@ -1,4 +1,4 @@
-# Configuración de Hardware — Lector de la Plataforma de Presencia (ESP32 + RC522)
+# Configuración de Hardware — Lector de Pulse (ESP32 + RC522)
 
 > Also available in: [English](HARDWARE_SETUP.md)
 

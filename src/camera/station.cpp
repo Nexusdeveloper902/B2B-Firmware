@@ -958,7 +958,7 @@ void Station::handleRoot() {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Presence Station</title>
+<title>Pulse Station</title>
 <style>
 body{margin:0;padding:24px;background:#111;color:#eee;font-family:system-ui,sans-serif}
 .container{width:min(1100px,100%);margin:auto}
@@ -972,7 +972,7 @@ h1{margin-top:0}
 </head>
 <body>
 <div class="container">
-<h1>Presence Platform — ESP32-CAM Station / Estación ESP32-CAM</h1>
+<h1>Pulse — ESP32-CAM Station / Estación ESP32-CAM</h1>
 <div class="section">
 <h2>Live View</h2>
 <div class="image-box"><img id="stream" alt="Live camera"></div>
