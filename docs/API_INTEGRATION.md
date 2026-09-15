@@ -49,8 +49,11 @@ default; switch modes with the serial-console password — TASK-003).
 }
 ```
 
-- `credential_uid` — the scanned UID (uppercase hex string for RC522
-  UIDs; any string in mock mode). Required.
+- `credential_uid` — the scanned credential: uppercase hex UID string for
+  RC522 physical cards (any string in mock mode), or the
+  application-level credential id for an HCE phone tap (e.g.
+  `TEST-ANDROID-001` — never the phone's RF UID, which Android
+  randomizes per tap; see [HCE_PROTOCOL.md](HCE_PROTOCOL.md)). Required.
 - `client_timestamp` — optional ISO 8601 device clock; the firmware
   currently omits it and lets the server timestamp the event (a broken
   device clock must never lose the tap — the backend also degrades
@@ -88,6 +91,20 @@ troubleshooting, FAQ — is [PAIRING.md](PAIRING.md) (TASK-004).
 ```json
 { "credential_uid": "A1B2C3D4" }
 ```
+
+HCE phones add the capture kind (built by
+`Presence::buildPairPayload(uid, reader.lastKind())` — the composition
+root passes `NfcReader::lastKind()`, `"hce"` only when `poll()`
+authenticated the phone through the SELECT AID + CHALLENGE exchange):
+
+```json
+{ "credential_uid": "TEST-ANDROID-001", "credential_kind": "hce" }
+```
+
+The kind is stored as `cards.kind` (display/audit only — the tap lookup
+is `credential_uid`-only); omitting it pairs as `physical`, so old
+firmware needs no changes. Full byte-level spec:
+[HCE_PROTOCOL.md](HCE_PROTOCOL.md).
 
 **Responses and firmware handling** (parsed by `Presence::parsePairResponse`):
 

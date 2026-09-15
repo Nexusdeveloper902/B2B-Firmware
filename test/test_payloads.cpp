@@ -60,6 +60,28 @@ void test_pair_payload_has_credential_uid_only(void) {
     const char* uid = doc["credential_uid"];
     TEST_ASSERT_EQUAL_STRING("1234ABCD", uid);
     TEST_ASSERT_TRUE(doc["client_timestamp"].isNull());
+    // Legacy body: no kind field for physical credentials.
+    TEST_ASSERT_TRUE(doc["credential_kind"].isNull());
+}
+
+void test_pair_payload_carries_hce_kind_for_phone_credentials(void) {
+    const std::string json = Presence::buildPairPayload("TEST-ANDROID-001", "hce");
+
+    JsonDocument doc;
+    TEST_ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
+    const char* uid = doc["credential_uid"];
+    TEST_ASSERT_EQUAL_STRING("TEST-ANDROID-001", uid);
+    const char* kind = doc["credential_kind"];
+    TEST_ASSERT_EQUAL_STRING("hce", kind);
+}
+
+void test_pair_payload_ignores_non_hce_kind(void) {
+    // Anything but "hce" sends the legacy body (old callers unchanged).
+    const std::string json = Presence::buildPairPayload("A1B2C3D4", "physical");
+
+    JsonDocument doc;
+    TEST_ASSERT_TRUE(deserializeJson(doc, json) == DeserializationError::Ok);
+    TEST_ASSERT_TRUE(doc["credential_kind"].isNull());
 }
 
 void runPayloadTests() {
@@ -69,4 +91,6 @@ void runPayloadTests() {
     RUN_TEST(test_tap_payload_is_valid_json);
     RUN_TEST(test_tap_payload_escapes_special_characters);
     RUN_TEST(test_pair_payload_has_credential_uid_only);
+    RUN_TEST(test_pair_payload_carries_hce_kind_for_phone_credentials);
+    RUN_TEST(test_pair_payload_ignores_non_hce_kind);
 }

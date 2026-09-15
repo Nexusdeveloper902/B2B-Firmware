@@ -160,6 +160,7 @@ so "mostly on" can never ship silently.
 | Environment | Reader | Use |
 |---|---|---|
 | `esp32dev` (opt-in) | `Rc522NfcReader` (RC522 over SPI) | the real reader — `pio run -e esp32dev` / `scripts/flash.sh --esp32` |
+| `esp32cam-reader` (opt-in) | `Rc522NfcReader` (RC522 over SPI) on an **ESP32-CAM board, camera-less** | the same reader firmware on an AI-Thinker ESP32-CAM — `pio run -e esp32cam-reader` / `scripts/flash.sh --cam-reader`. See [Reader on an ESP32-CAM board](#reader-on-an-esp32-cam-board-esp32cam-reader) |
 | `esp32dev-mock` (opt-in) | `MockSerialNfcReader` — type a UID + Enter in the Serial Monitor | development without the RC522 attached; still exercises Wi-Fi, HTTP, modes, feedback on a real board |
 | `native` | — | host-side unit tests (`pio test -e native`) |
 
@@ -176,6 +177,8 @@ cp include/secrets.h.example include/secrets.h   # then edit: Wi-Fi, backend URL
 # station image instead of this reader.
 pio run -e esp32dev -t upload                     # real reader
 ./scripts/flash.sh --esp32                        # same, via the flash wrapper
+pio run -e esp32cam-reader -t upload              # reader on an ESP32-CAM board (no camera)
+./scripts/flash.sh --cam-reader                   # same
 pio run -e esp32dev-mock -t upload                # mock reader (opt-in)
 ./scripts/flash.sh --mock                         # same
 
@@ -184,6 +187,27 @@ pio device monitor -e esp32dev                    # 115200 baud
 
 The reader key comes from the B2B-Core seeder output (`./run setup` in
 the backend repo prints every reader's `api_key`).
+
+## Reader on an ESP32-CAM board (`esp32cam-reader`)
+
+An AI-Thinker ESP32-CAM can run **only** the reader: env `esp32cam-reader`
+builds the same `src/main.cpp` as `esp32dev` (tap/pair pipeline, mode
+console, HCE) for the CAM board, with **no camera code and no
+`esp32-camera` library** — the camera module does not need to be
+connected. It is not the station: no capture, no shutter, no visualizer.
+
+| | `esp32cam-reader` |
+|---|---|
+| RC522 wiring | **identical to the station** — SDA/SS → GPIO13, SCK → GPIO14, MOSI → GPIO15, MISO → GPIO2, RST → **3V3** (not a GPIO), VCC → 3V3, GND → GND. Both envs read these from `include/config/esp32cam_board.h`, so a station's RC522 harness moves over unchanged. |
+| Feedback | onboard red LED on **GPIO33** only (active-LOW; `PIN_STATION_LED_ACTIVE_LOW` flips inverted clones). Mode heartbeat and one-shot event patterns share it — an event preempts the heartbeat, which resumes afterwards. Same patterns as the [LED pattern reference](#led-pattern-reference). |
+| Buzzer | none — the CAM board has no free header GPIO for it |
+| Untouched pins | GPIO4 (flash LED), GPIO12 (MTDI strap), GPIO16 (PSRAM), GPIO1/3 (serial console) |
+| Monitor | `pio device monitor -e esp32cam-reader` (keeps `monitor_dtr=0`/`monitor_rts=0`, required by the AI-Thinker auto-download circuit) |
+
+The boot banner adds `Board: ESP32-CAM (reader only, no camera …)` so
+the serial log shows which image is on the board. Do **not** flash
+`esp32dev` onto a CAM board: that image puts the RC522 on GPIO18/19/23/5
+(not broken out) and drives GPIO25/26 (camera bus) and GPIO33 as LEDs/buzzer.
 
 ## Reader self-recovery (TASK-002)
 

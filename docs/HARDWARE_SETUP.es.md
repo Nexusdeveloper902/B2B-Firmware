@@ -167,6 +167,7 @@ silencio.
 | Entorno | Lector | Uso |
 |---|---|---|
 | `esp32dev` (optativo) | `Rc522NfcReader` (RC522 por SPI) | el lector real — `pio run -e esp32dev` / `scripts/flash.sh --esp32` |
+| `esp32cam-reader` (optativo) | `Rc522NfcReader` (RC522 por SPI) sobre una **placa ESP32-CAM, sin cámara** | el mismo firmware de lector en un AI-Thinker ESP32-CAM — `pio run -e esp32cam-reader` / `scripts/flash.sh --cam-reader`. Ver [Lector sobre una placa ESP32-CAM](#lector-sobre-una-placa-esp32-cam-esp32cam-reader) |
 | `esp32dev-mock` (opcional) | `MockSerialNfcReader` — escribe un UID + Enter en el Monitor Serial | desarrollo sin RC522; aun así ejercita Wi-Fi, HTTP, modos y retroalimentación en una placa real |
 | `native` | — | pruebas unitarias en el host (`pio test -e native`) |
 
@@ -183,6 +184,8 @@ cp include/secrets.h.example include/secrets.h   # luego edita: Wi-Fi, URL del b
 # flashearía la imagen de estación en lugar de este lector.
 pio run -e esp32dev -t upload                     # lector real
 ./scripts/flash.sh --esp32                        # igual, vía el envoltorio de flasheo
+pio run -e esp32cam-reader -t upload              # lector sobre placa ESP32-CAM (sin cámara)
+./scripts/flash.sh --cam-reader                   # igual
 pio run -e esp32dev-mock -t upload                # lector simulado (opcional)
 ./scripts/flash.sh --mock                         # igual
 
@@ -191,6 +194,28 @@ pio device monitor -e esp32dev                    # 115200 baudios
 
 La clave del lector viene de la salida del seeder de B2B-Core (`./run setup`
 en el repositorio del backend imprime el `api_key` de cada lector).
+
+## Lector sobre una placa ESP32-CAM (`esp32cam-reader`)
+
+Un AI-Thinker ESP32-CAM puede correr **solo** el lector: el entorno
+`esp32cam-reader` compila el mismo `src/main.cpp` que `esp32dev` (flujo
+de toque/emparejamiento, consola de modo, HCE) para la placa CAM, **sin
+código de cámara ni la librería `esp32-camera`** — el módulo de cámara no
+necesita estar conectado. No es la estación: sin captura, sin
+disparador, sin visualizador.
+
+| | `esp32cam-reader` |
+|---|---|
+| Cableado RC522 | **idéntico a la estación** — SDA/SS → GPIO13, SCK → GPIO14, MOSI → GPIO15, MISO → GPIO2, RST → **3V3** (no un GPIO), VCC → 3V3, GND → GND. Ambos entornos leen estos pines de `include/config/esp32cam_board.h`, así que el arnés RC522 de una estación sirve sin cambios. |
+| Retroalimentación | solo el LED rojo integrado en **GPIO33** (activo en BAJO; `PIN_STATION_LED_ACTIVE_LOW` corrige clones invertidos). El latido de modo y los patrones de evento lo comparten — un evento interrumpe el latido, que se reanuda después. Mismos patrones que la [referencia de patrones LED](#referencia-de-patrones-led). |
+| Zumbador | ninguno — la placa CAM no tiene un GPIO libre en el cabezal |
+| Pines intactos | GPIO4 (LED flash), GPIO12 (strap MTDI), GPIO16 (PSRAM), GPIO1/3 (consola serial) |
+| Monitor | `pio device monitor -e esp32cam-reader` (mantiene `monitor_dtr=0`/`monitor_rts=0`, requerido por el circuito auto-download del AI-Thinker) |
+
+El banner de arranque añade `Board: ESP32-CAM (reader only, no camera …)`
+para que el log serial muestre qué imagen tiene la placa. **No** flashees
+`esp32dev` en una placa CAM: esa imagen pone el RC522 en GPIO18/19/23/5
+(no expuestos) y maneja GPIO25/26 (bus de cámara) y GPIO33 como LEDs/zumbador.
 
 ## Auto-recuperación del lector (TASK-002)
 

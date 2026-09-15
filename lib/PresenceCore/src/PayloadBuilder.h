@@ -15,8 +15,14 @@ namespace Presence {
 std::string buildTapPayload(const std::string& credentialUid,
                              const std::string& clientTimestampIso = "");
 
-/** POST /api/v1/admin/cards/pair body: {"credential_uid": "..."} */
-std::string buildPairPayload(const std::string& credentialUid);
+/**
+ * POST /api/v1/admin/cards/pair body: {"credential_uid": "..."}.
+ * HCE integration: kind "hce" adds {"credential_kind": "hce"} (HOW the
+ * credential was captured — an application-level HCE credential id, not
+ * an RF UID). Any other/empty kind sends the legacy body byte-for-byte.
+ */
+std::string buildPairPayload(const std::string& credentialUid,
+                             const std::string& credentialKind = "");
 
 /** POST /api/v1/recycling/captures/{id}/associate body: {"credential_uid": "..."}
  *  (TASK-008: the bottle-first resolution call — B2B-Core TASK-025.) */

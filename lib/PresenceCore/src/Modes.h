@@ -24,7 +24,8 @@ public:
     const char* label() const override { return "OPERATION / OPERACION"; }
     const char* hint() const override;
 
-    ApiCall onCardTap(const std::string& credentialUid) override;
+    ApiCall onCardTap(const std::string& credentialUid,
+                      const std::string& credentialKind = "") override;
 
     /** Reduce a parsed tap response into device feedback. */
     FeedbackSignal interpret(const TapResult& result) const;
@@ -36,7 +37,8 @@ public:
     const char* label() const override { return "PAIRING / EMPAREJAR"; }
     const char* hint() const override;
 
-    ApiCall onCardTap(const std::string& credentialUid) override;
+    ApiCall onCardTap(const std::string& credentialUid,
+                      const std::string& credentialKind = "") override;
 
     /** Reduce a parsed pairing response into device feedback. */
     FeedbackSignal interpret(const PairResult& result) const;

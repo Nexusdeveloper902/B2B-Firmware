@@ -1,6 +1,7 @@
 /**
  * config/esp32cam.h — STATION board (env `esp32cam`): AI-Thinker ESP32-CAM
- * (OV3660) with camera + RC522 aboard. THE authoritative CAM hardware map.
+ * (OV3660) with camera + RC522 aboard. Board pins (RC522, LED) live in
+ * config/esp32cam_board.h; this file adds the camera-station-only parts.
  *
  *   RC522:  SDA/SS → 13 | SCK → 14 | MOSI → 15 | MISO → 2 | RST → 3V3
  *           (bench temp: RST strapped to 3V3, soft reset only —
@@ -18,26 +19,9 @@
  */
 #pragma once
 
-#include "config/common.h"
+#include "config/esp32cam_board.h"  // RC522 + LED pins, shared with env `esp32cam-reader`
 
-// --- Station RC522 (same SPI numbers as the reader bench) ------------------
-#define PIN_RC522_SCK   14
-#define PIN_RC522_MISO  2
-#define PIN_RC522_MOSI  15
-#define PIN_RC522_SS    13
-// Bench temp: RC522 RST strapped to 3V3 (soft reset only) — GPIO4 is the
-// onboard flash LED and must not be driven. The MFRC522 library treats
-// 255 (UINT8_MAX, UNUSED_PIN) as "no RST pin"; (uint8_t)-1 is exactly that.
-#define PIN_RC522_RST   -1
-
-// --- Station feedback: one LED, no buzzer ----------------------------------
-// TASK-010 (LED follow-up): polarity is now a CONFIG value, not a buried
-// assumption. AI-Thinker genuine boards: red LED on GPIO33 is ACTIVE-LOW
-// (ON = pin LOW). Some clone boards invert it — on those the LED sits
-// SOLID ON with the default and every pattern looks inverted. Flip this
-// one define to 0 on such a board; nothing else changes.
-#define PIN_STATION_LED              33
-#define PIN_STATION_LED_ACTIVE_LOW   1
+// --- Station feedback: one LED (esp32cam_board.h), no buzzer ---------------
 #define PIN_CAM_BUZZER    -1    // no free pin on this bench (GPIO4 is the flash LED)
 
 // --- LED diagnostics quick reference (full table in docs/HARDWARE_SETUP.md) -

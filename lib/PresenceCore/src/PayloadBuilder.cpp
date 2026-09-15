@@ -19,10 +19,17 @@ std::string buildTapPayload(const std::string& credentialUid,
     return out;
 }
 
-std::string buildPairPayload(const std::string& credentialUid) {
+std::string buildPairPayload(const std::string& credentialUid,
+                             const std::string& credentialKind) {
     JsonDocument doc;
 
     doc["credential_uid"] = credentialUid;
+    if (credentialKind == "hce") {
+        // The backend stores this as cards.kind (display/audit only —
+        // tap lookup stays credential_uid-only). Omitted otherwise so
+        // physical-card readers send the legacy body unchanged.
+        doc["credential_kind"] = credentialKind;
+    }
 
     std::string out;
     serializeJson(doc, out);

@@ -139,6 +139,29 @@ mirror the LED patterns.
 - [ ] 9.1 Power-cycle 3 times in a row; every boot reaches the idle
       pattern within 20 s and stays stable for 2 min.
 
+## 10. Android HCE phone (ISO-DEP + APDU path)
+
+- [ ] 10.1 Install `B2B-App/pulse-credential` on the phone, enable NFC,
+      open the app once (`READY TO TAP`). Confirm `HCE_SECRET` matches
+      `include/secrets.h` (mismatch fails closed by design).
+- [ ] 10.2 OPERATION, unpaired phone: tap + hold 1–2 s → serial shows
+      `ISO-DEP target` + `HCE credential authenticated: <credId>` and
+      `[404]` (unknown card) + the pair-the-card hint — NOT a hex UID.
+      Read the `target SAK=…` line first: `0x08` = phone not offering HCE
+      (check the phone side), `0x20` + `ATS=0B` = RATS failed (hold the
+      phone steadier/longer, remove case, retry). MIFARE cards still tap
+      normally (no regression).
+- [ ] 10.3 PAIRING, armed window: tap the phone → `[OK] card paired to:`
+      + desk success line; backend `cards` row has `kind = hce` and the
+      desk badges it “Phone”.
+- [ ] 10.4 OPERATION, paired phone: tap → `[OK] event logged` for the
+      right student. Tap 3×, note the UID-length log lines differ per tap
+      (randomized RF UID) while the SAME credential id authenticates —
+      the UID-independence proof (spec §“UID-independence evidence”).
+- [ ] 10.5 Revoke the card server-side (`status = revoked`) → phone tap
+      `[404]`; unpair → tap `[404]`; re-pair to another student → works
+      with `kind = hce` preserved.
+
 ---
 
 **Record your results** (date, firmware commit, PASS/FAIL per item, notes)

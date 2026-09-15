@@ -26,8 +26,16 @@ public:
      * Returns true (and fills uidOut, uppercase hex string) when a card
      * was read this call. / Sondeo no bloqueante: true cuando se leyó una
      * tarjeta (uidOut = cadena hex mayúsculas).
+     *
+     * HCE integration: uidOut may instead hold an application-level HCE
+     * credential id (from the SELECT AID + CHALLENGE exchange, never the
+     * RF UID) — lastKind() tells which one the last successful poll
+     * returned ("physical" or "hce").
      */
     virtual bool poll(std::string& uidOut) = 0;
+
+    /** HOW the last successful poll's credential was captured. */
+    virtual const char* lastKind() const { return "physical"; }
 
     /** Short label for the serial log. */
     virtual const char* label() const = 0;

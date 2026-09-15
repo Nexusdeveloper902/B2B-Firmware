@@ -61,13 +61,18 @@
 
 #if defined(PRESENCE_READER_IMPL_RC522)
 #include "Rc522NfcReader.h"
+#include "TsLog.h"  // millis() prefix on reader diagnostics (bench correlation)
 #elif defined(PRESENCE_READER_IMPL_MOCK)
 #include "MockSerialNfcReader.h"
 #else
-#error "Select a reader implementation: build env esp32dev (RC522) or esp32dev-mock"
+#error "Select a reader implementation: build env esp32dev / esp32cam-reader (RC522) or esp32dev-mock"
 #endif
 
+#if defined(READER_ON_CAM_BOARD)
+#include "StationLed.h"  // CAM board: one onboard LED carries both channels
+#else
 #include "LedFeedbackController.h"
+#endif
 #include "EspApiClient.h"
 #include "WifiService.h"
 
@@ -79,7 +84,14 @@ using namespace Presence;
 static WifiService wifi(WIFI_SSID, WIFI_PASSWORD,
                         WIFI_CONNECT_TIMEOUT_MS, WIFI_RECONNECT_INTERVAL_MS);
 static EspApiClient api(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS);
+#if defined(READER_ON_CAM_BOARD)
+// env esp32cam-reader: no free GPIOs for MODE/EVENT LEDs + buzzer on the
+// CAM board — the onboard red LED shows both by precedence (events preempt
+// the mode heartbeat), exactly like the station. See config/esp32cam_reader.h.
+static StationLed feedback(PIN_STATION_LED, PIN_STATION_LED_ACTIVE_LOW != 0);
+#else
 static LedFeedbackController feedback(PIN_LED_MODE, PIN_LED_EVENT, PIN_BUZZER);
+#endif
 static CardDebouncer debouncer(CARD_COOLDOWN_MS);
 
 // TASK-003: the serial console that gates mode switching. Password value
@@ -90,9 +102,10 @@ static ModeConsole modeConsole(MODE_PASSWORD,
 static LineBuffer serialInput(SERIAL_LINE_MAX_LENGTH);
 
 #if defined(PRESENCE_READER_IMPL_RC522)
+static TsLog tsLog(Serial);  // timestamped diagnostics sink (bench ask)
 static Rc522NfcReader reader(PIN_RC522_SS, PIN_RC522_RST,
                              PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI,
-                             &Serial);  // Serial = diagnostics sink
+                             &tsLog);  // TsLog wraps Serial = diagnostics sink
 #elif defined(PRESENCE_READER_IMPL_MOCK)
 static MockSerialNfcReader reader;
 #endif
@@ -108,6 +121,11 @@ static void printBanner() {
     Serial.println();
     Serial.println("==============================================");
     Serial.println(" Pulse — NFC Reader / Lector NFC");
+    Serial.print(" Build: ");
+    Serial.println(PULSE_FW_BUILD);  // bench rule: every flashed change bumps this
+#if defined(READER_ON_CAM_BOARD)
+    Serial.println(" Board: ESP32-CAM (reader only, no camera / solo lector, sin camara)");
+#endif
     Serial.println("==============================================");
     Serial.print("Reader impl / Implementacion: ");
     Serial.println(reader.label());
@@ -150,7 +168,11 @@ void setup() {
         // loop() reintenta cada RC522_REINIT_INTERVAL_MS.
         Serial.println("[!] NFC reader init failed — will keep retrying /");
         Serial.println("    fallo de init del lector — se seguira reintentando");
+#if defined(READER_ON_CAM_BOARD)
+        Serial.println("    Wiring table: docs/HARDWARE_SETUP.md (ESP32-CAM reader)");
+#else
         Serial.println("    Wiring table: docs/HARDWARE_SETUP.md");
+#endif
     }
 
     printBanner();
@@ -298,8 +320,11 @@ static void handleCardTap(const std::string& uid) {
     Serial.print("[NFC] card / tarjeta: ");
     Serial.println(uid.c_str());
 
-    // 1) The mode strategy decides WHICH call this tap becomes.
-    ApiCall call = mode->onCardTap(uid);
+    // 1) The mode strategy decides WHICH call this tap becomes. The kind
+    //    ("hce" when poll() authenticated a phone through the APDU
+    //    exchange) rides only into pairing as credential_kind — the tap
+    //    lookup is credential_uid-only on purpose (RF UID ≠ identity).
+    ApiCall call = mode->onCardTap(uid, reader.lastKind());
 
     // 2) Transport (never throws; failures → status < 0).
     HttpResponse response = api.post(call.path, call.jsonBody);

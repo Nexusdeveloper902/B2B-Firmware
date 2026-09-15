@@ -139,3 +139,31 @@ ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
 - Pending: physical bench session for the LED grammar + the full
   CAMERA_STATION flow; B2B-Core TASK-027 (same session) closed the
   backend punch list.
+
+## TASK-011 delivery closed (2026-09-14, RUN-2026-09-14-firmware-014)
+
+- The reader speaks HCE: `HceProtocol` (pure-C++ APDU core — builders
+  byte-exact, parsers, vendored SHA-256/HMAC pinned by an RFC 4231
+  vector) + `Rc522NfcReader` on `MFRC522Extended` (drop-in per the
+  vendored 1.4.12 source: auto-RATS on SAK bit 6, `uid` member still
+  filled). SAK+ATS → SELECT → fresh-nonce CHALLENGE → constant-time
+  verify → application-level credId; MIFARE path behaviorally untouched.
+- `NfcReader::lastKind()` (`physical` | `hce`) reaches pairing as
+  `credential_kind`; tap/associate bodies unchanged (uid-only).
+  `HCE_SECRET` in both secrets templates (+ `#ifndef` dev fallback).
+- Docs: `HCE_PROTOCOL.md` + `.es.md` (canonical byte spec),
+  API_INTEGRATION / PAIRING / MANUAL_VERIFICATION_CHECKLIST (both
+  languages, incl. bench §10 with the 3-tap UID-independence check).
+- Verification: native 111/111 (+15), esp32dev + esp32dev-mock +
+  esp32cam builds SUCCESS, Android 3/3 + debug APK. Human bench §10
+  pending (no hardware in agent runs).
+
+## TASK-012 delivery (2026-09-15)
+
+- New opt-in env `esp32cam-reader` (ADR-014): the reader image
+  (`src/main.cpp`, HCE included) on an AI-Thinker ESP32-CAM board with
+  no camera code/library. RC522 on the station's pins via the shared
+  `config/esp32cam_board.h`; single GPIO33 LED feedback (`StationLed`);
+  no buzzer. `scripts/flash.sh --cam-reader`.
+- Verification: native 112/112, all four board envs build. Bench flash
+  pending.

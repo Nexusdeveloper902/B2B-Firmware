@@ -21,7 +21,9 @@ const char* PairingMode::hint() const {
            "     luego acerca una tarjeta NUEVA";
 }
 
-ApiCall OperationMode::onCardTap(const std::string& credentialUid) {
+ApiCall OperationMode::onCardTap(const std::string& credentialUid, const std::string&) {
+    // credentialKind intentionally ignored: the tap lookup is
+    // credential_uid-only (the HCE phone's RF UID is never identity).
     ApiCall call;
     call.type = ApiCallType::Tap;
     call.path = "/api/v1/events/tap";
@@ -56,11 +58,12 @@ FeedbackSignal OperationMode::interpret(const TapResult& result) const {
     }
 }
 
-ApiCall PairingMode::onCardTap(const std::string& credentialUid) {
+ApiCall PairingMode::onCardTap(const std::string& credentialUid,
+                               const std::string& credentialKind) {
     ApiCall call;
     call.type = ApiCallType::PairCard;
     call.path = "/api/v1/admin/cards/pair";
-    call.jsonBody = buildPairPayload(credentialUid);
+    call.jsonBody = buildPairPayload(credentialUid, credentialKind);
     return call;
 }
 

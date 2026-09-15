@@ -10,6 +10,7 @@
  */
 #include <unity.h>
 
+void runHceProtocolTests();
 void runPayloadTests();
 void runResponseTests();
 void runModeTests();
@@ -19,6 +20,7 @@ void runAuthTests();
 void runCaptureTriggerTests();
 void runCapturePayloadTests();
 void runStationConfigTests();
+void runCamReaderConfigTests();
 
 // Shared by every test (Unity calls these around each RUN_TEST).
 void setUp() {}
@@ -27,6 +29,7 @@ void tearDown() {}
 int main() {
     UNITY_BEGIN();
 
+    runHceProtocolTests();  // HCE APDU protocol: builders, parsers, HMAC, UID-independence
     runPayloadTests();    // JSON request payloads (tap + pairing)
     runResponseTests();   // response parsing: every documented case
     runModeTests();       // mode strategies + feedback mapping
@@ -36,6 +39,7 @@ int main() {
     runCaptureTriggerTests();  // TASK-008: the capture trigger seam (line discipline + cooldown)
     runCapturePayloadTests();  // TASK-008: multipart wire bytes + associate JSON
     runStationConfigTests();   // station hardware map + station feedback
+    runCamReaderConfigTests(); // esp32cam-reader: station RC522 pins, no camera/DevKit pins
 
     return UNITY_END();
 }

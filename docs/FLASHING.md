@@ -26,6 +26,7 @@ prevent (see ADR-010).
 |---|---|---|---|
 | *(no flag)* | `esp32cam` / `cam` | `esp32cam` | **ESP32-CAM recycling station** — the default, matching `default_envs` in `platformio.ini` (station-first since ADR-010) |
 | `--esp32` / `--reader` | `esp32` / `reader` / `esp32dev` | `esp32dev` | ESP32 DevKit RC522 reader |
+| `--cam-reader` | `cam-reader` / `esp32cam-reader` | `esp32cam-reader` | ESP32-CAM board running **only the reader** — RC522 on the station's pins, onboard LED, no camera code ([HARDWARE_SETUP.md](HARDWARE_SETUP.md#reader-on-an-esp32-cam-board-esp32cam-reader)) |
 | `--mock` | `mock` / `esp32dev-mock` | `esp32dev-mock` | Mock reader — serial-driven virtual taps, development without the RC522 attached |
 
 > Since ADR-010 the default is the **camera station**, not the reader.
@@ -37,6 +38,7 @@ prevent (see ADR-010).
 ./scripts/flash.sh                      # camera station (esp32cam — default)
 ./scripts/flash.sh --esp32              # reader DevKit (esp32dev)
 ./scripts/flash.sh --reader             # same as --esp32
+./scripts/flash.sh --cam-reader -m      # reader on an ESP32-CAM board (esp32cam-reader), then monitor
 ./scripts/flash.sh --mock               # mock reader (esp32dev-mock)
 ./scripts/flash.sh --board esp32cam     # long form (also: --env / -e)
 ./scripts/flash.sh --esp32 --port /dev/ttyUSB1
@@ -51,8 +53,9 @@ prevent (see ADR-010).
 |---|---|
 | `--esp32` / `--reader` | target `esp32dev` (real RC522 reader) |
 | `--esp32cam` / `--cam` | target `esp32cam` (camera station — also the no-flag default) |
+| `--cam-reader` | target `esp32cam-reader` (reader image on an ESP32-CAM board, no camera) |
 | `--mock` | target `esp32dev-mock` (mock reader) |
-| `--board <name>` / `--env <name>` / `-e <name>` | long form of the above: accepts `esp32` \| `reader` \| `esp32dev`, `esp32cam` \| `cam`, `mock` \| `esp32dev-mock` |
+| `--board <name>` / `--env <name>` / `-e <name>` | long form of the above: accepts `esp32` \| `reader` \| `esp32dev`, `esp32cam` \| `cam`, `cam-reader` \| `esp32cam-reader`, `mock` \| `esp32dev-mock` |
 | `--port <port>` | forward `--upload-port <port>` to `pio run` (e.g. `/dev/ttyUSB1`, `COM3`) |
 | `-m` / `--monitor` | after a successful flash, `exec pio device monitor -e <env>` (115200 baud) |
 | `--` | everything after is appended to the `pio run` command unchanged |
@@ -64,7 +67,7 @@ Unknown flags/boards exit with code 2 and a hint listing the valid names.
 ## Monitor notes
 
 - The monitor runs **with the target env's config**: for the camera
-  station that keeps `monitor_dtr=0` / `monitor_rts=0`, which the
+  station (and `esp32cam-reader`) that keeps `monitor_dtr=0` / `monitor_rts=0`, which the
   AI-Thinker auto-download circuit requires — never open the CAM port
   with a plain env-less `pio device monitor`.
 - Baud is 115200 (`monitor_speed` in `platformio.ini`).

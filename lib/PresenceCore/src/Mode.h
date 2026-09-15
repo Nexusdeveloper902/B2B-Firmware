@@ -40,8 +40,16 @@ public:
     /**
      * Build the HTTP call this mode makes for a scanned card UID.
      * Construye la llamada HTTP que este modo hace para un UID leído.
+     *
+     * HCE integration: credentialKind carries HOW the credential was
+     * captured ("hce" for an application-level phone credential id,
+     * anything else for a physical UID). Only the pairing strategy
+     * forwards it (as credential_kind); the tap lookup is
+     * credential_uid-only, so operation mode ignores it. Default keeps
+     * every existing caller compiling unchanged.
      */
-    virtual ApiCall onCardTap(const std::string& credentialUid) = 0;
+    virtual ApiCall onCardTap(const std::string& credentialUid,
+                              const std::string& credentialKind = "") = 0;
 };
 
 }  // namespace Presence

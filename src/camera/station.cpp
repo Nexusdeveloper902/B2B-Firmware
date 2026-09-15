@@ -62,7 +62,7 @@ Station::Station()
       led_(PIN_STATION_LED, PIN_STATION_LED_ACTIVE_LOW != 0),
       wifi_(WIFI_SSID, WIFI_PASSWORD, WIFI_CONNECT_TIMEOUT_MS, WIFI_RECONNECT_INTERVAL_MS),
       api_(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS),
-      nfc_(PIN_RC522_SS, PIN_RC522_RST, PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI, &Serial),
+      nfc_(PIN_RC522_SS, PIN_RC522_RST, PIN_RC522_SCK, PIN_RC522_MISO, PIN_RC522_MOSI, &tsLog_),
       debouncer_(CARD_COOLDOWN_MS),
       mode_(&operationMode_),
       console_(MODE_PASSWORD, MODE_CONSOLE_MAX_WRONG_ATTEMPTS, MODE_CONSOLE_LOCKOUT_MS),
@@ -148,6 +148,8 @@ void Station::printBanner() {
     Serial.println();
     Serial.println("================================");
     Serial.println("SERVER READY / SERVIDOR LISTO");
+    Serial.print("Build: ");
+    Serial.println(PULSE_FW_BUILD);  // bench rule: every flashed change bumps this
     Serial.println("================================");
     Serial.print("[EN] Visualizer / [ES] Visualizador: http://");
     Serial.print(wifi_.ip().c_str());
@@ -749,7 +751,10 @@ void Station::handleCardTap(const std::string& uid) {
     Serial.print("[NFC] card / tarjeta: ");
     Serial.println(uid.c_str());
 
-    ApiCall call = mode_->onCardTap(uid);
+    // Same kind contract as the reader main: "hce" (phone authenticated
+    // through the APDU exchange) reaches pairing as credential_kind; the
+    // tap/associate lookups stay credential_uid-only (RF UID ≠ identity).
+    ApiCall call = mode_->onCardTap(uid, nfc_.lastKind());
     // Lazy expiry first: an expired pending must not steal this tap.
     expireStaleTransactions(millis());
     // Bottle-first pending: a physical tap IS the associate (no new tap

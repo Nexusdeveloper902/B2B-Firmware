@@ -314,6 +314,30 @@ imprimen la primera línea):
 
 ---
 
+## Toques de teléfono (HCE de Android) — mismo flujo, sin pasos nuevos
+
+Un teléfono con la app HCE de Pulse (`B2B-App/pulse-credential`) se
+empareja y toca por este flujo exacto — armar, modo EMPAREJAR, tocar
+dentro de la ventana — con dos diferencias del lado del equipo, ambas
+automáticas:
+
+1. Sostén el teléfono quieto 1–2 s sobre la antena (la activación
+   ISO-DEP + dos APDUs toman más que leer un UID MIFARE).
+2. El serial muestra las líneas HCE (`ISO-DEP target … ignored as
+   identity` → `HCE credential authenticated: <credId>`) en vez de un
+   UID hex, y la llamada de emparejamiento lleva
+   `"credential_kind": "hce"` (se guarda como `cards.kind`; el
+   escritorio lo marca “Teléfono”).
+
+Todo lo demás — 409 sin sesión, 422 sin reasignación, consumo de un solo
+uso, tap inmediato tras emparejar — es idéntico, porque el id de
+credencial a nivel de aplicación del teléfono ES el `credential_uid`.
+`HCE authentication FAILED` significa que teléfono y lector discrepan en
+`HCE_SECRET` (compara con `B2B-App/pulse-credential`). El UID RF del
+teléfono jamás es identidad (Android lo aleatoriza por toque).
+Especificación completa a nivel de bytes:
+[HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md).
+
 ## Qué significa cada resultado
 
 `parsePairResponse` decide por el código HTTP; el `message` del backend se
@@ -351,6 +375,20 @@ modo actual: reposo de emparejamiento = **dos** parpadeos cortos cada ~2 s
 ---
 
 ## Solución de problemas
+
+**Un UID distinto en cada toque, empezando con `08` (p. ej. `0822D6DD`,
+`08A728CE`, `08727223`)** — eso NO es una tarjeta MIFARE, es un teléfono
+SIN la app HCE activa. `08…` es el prefijo de ID aleatorio del NFC Forum:
+Android responde la anticolisión con un UID aleatorio por toque cuando
+ningún servicio HCE atiende, y el bit 6 del SAK queda en cero así que el
+lector toma correctamente la ruta MIFARE. Emparejar ese UID quema la
+sesión en basura (jamás volverá a tocar — desvincula esa fila desde el
+escritorio). Arreglo: instala/abre `B2B-App/pulse-credential` (`READY TO
+TAP`), NFC encendido, pantalla encendida, sostén quieto 1–2 s — el serial
+debe mostrar `ISO-DEP target` + `HCE credential authenticated: <credId>`,
+jamás `[NFC] card: 08…`. Si de verdad era una tarjeta física, la tarjeta
+o el campo RF están fallando (un UID MIFARE real jamás cambia) — prueba
+otra tarjeta y revisa los 3.3 V.
 
 **`[401]` en cada toque/emparejamiento** — en firmware **anterior a
 TASK-007** (2026-09-05) esto era un bug del firmware: el dispositivo

@@ -26,6 +26,7 @@ exacto de placa equivocada que estas banderas evitan (ver ADR-010).
 |---|---|---|---|
 | *(sin bandera)* | `esp32cam` / `cam` | `esp32cam` | **Estación de reciclaje ESP32-CAM** — el predeterminado, igual que `default_envs` en `platformio.ini` (estación primero desde ADR-010) |
 | `--esp32` / `--reader` | `esp32` / `reader` / `esp32dev` | `esp32dev` | Lector RC522 en DevKit ESP32 |
+| `--cam-reader` | `cam-reader` / `esp32cam-reader` | `esp32cam-reader` | Placa ESP32-CAM que corre **solo el lector** — RC522 en los pines de la estación, LED integrado, sin código de cámara ([HARDWARE_SETUP.es.md](HARDWARE_SETUP.es.md#lector-sobre-una-placa-esp32-cam-esp32cam-reader)) |
 | `--mock` | `mock` / `esp32dev-mock` | `esp32dev-mock` | Lector simulado — toques virtuales por Serial, desarrollo sin el RC522 conectado |
 
 > Desde ADR-010 el predeterminado es la **estación de cámara**, no el
@@ -37,6 +38,7 @@ exacto de placa equivocada que estas banderas evitan (ver ADR-010).
 ./scripts/flash.sh                      # estación de cámara (esp32cam — predeterminado)
 ./scripts/flash.sh --esp32              # DevKit lector (esp32dev)
 ./scripts/flash.sh --reader             # igual que --esp32
+./scripts/flash.sh --cam-reader -m      # lector sobre placa ESP32-CAM (esp32cam-reader), luego monitorea
 ./scripts/flash.sh --mock               # lector simulado (esp32dev-mock)
 ./scripts/flash.sh --board esp32cam     # forma larga (también: --env / -e)
 ./scripts/flash.sh --esp32 --port /dev/ttyUSB1
@@ -51,8 +53,9 @@ exacto de placa equivocada que estas banderas evitan (ver ADR-010).
 |---|---|
 | `--esp32` / `--reader` | apunta a `esp32dev` (lector RC522 real) |
 | `--esp32cam` / `--cam` | apunta a `esp32cam` (estación de cámara — también el predeterminado sin bandera) |
+| `--cam-reader` | apunta a `esp32cam-reader` (imagen de lector en placa ESP32-CAM, sin cámara) |
 | `--mock` | apunta a `esp32dev-mock` (lector simulado) |
-| `--board <nombre>` / `--env <nombre>` / `-e <nombre>` | forma larga de lo anterior: acepta `esp32` \| `reader` \| `esp32dev`, `esp32cam` \| `cam`, `mock` \| `esp32dev-mock` |
+| `--board <nombre>` / `--env <nombre>` / `-e <nombre>` | forma larga de lo anterior: acepta `esp32` \| `reader` \| `esp32dev`, `esp32cam` \| `cam`, `cam-reader` \| `esp32cam-reader`, `mock` \| `esp32dev-mock` |
 | `--port <puerto>` | envía `--upload-port <puerto>` a `pio run` (p. ej. `/dev/ttyUSB1`, `COM3`) |
 | `-m` / `--monitor` | tras flashear bien, `exec pio device monitor -e <entorno>` (115200 baudios) |
 | `--` | todo lo que sigue se añade tal cual al comando `pio run` |
@@ -65,7 +68,7 @@ nombres válidos.
 ## Notas del monitor
 
 - El monitor corre **con la configuración del entorno objetivo**: para la
-  estación de cámara eso mantiene `monitor_dtr=0` / `monitor_rts=0`, que
+  estación de cámara (y `esp32cam-reader`) eso mantiene `monitor_dtr=0` / `monitor_rts=0`, que
   el circuito auto-download del AI-Thinker exige — nunca abras el puerto
   de la CAM con un `pio device monitor` simple sin entorno.
 - La velocidad es 115200 (`monitor_speed` en `platformio.ini`).

@@ -59,6 +59,7 @@
 #include "NfcReader.h"
 #include "PayloadBuilder.h"
 #include "Rc522NfcReader.h"
+#include "TsLog.h"  // millis() prefix on reader diagnostics (bench correlation)
 #include "ResponseParser.h"
 #include "StationLed.h"
 #include "WifiService.h"
@@ -111,6 +112,8 @@ private:
     StationLed led_;
     WifiService wifi_;
     EspApiClient api_;
+    // Declared before nfc_: members construct in declaration order.
+    TsLog tsLog_{Serial};  // timestamped diagnostics sink (bench ask)
     Rc522NfcReader nfc_;
     CardDebouncer debouncer_;
     OperationMode operationMode_;

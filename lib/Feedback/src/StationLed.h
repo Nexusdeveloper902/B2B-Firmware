@@ -1,5 +1,6 @@
 /**
- * StationLed.h — one-pin FeedbackController for the ESP32-CAM station.
+ * StationLed.h — one-pin FeedbackController for ESP32-CAM boards (the station
+ * and the camera-less `esp32cam-reader` env).
  *
  * The CAM board has a single usable LED (red, GPIO33, active-LOW):
  * GPIO25/26 are camera VSYNC/SIOD and GPIO4 is the onboard flash LED

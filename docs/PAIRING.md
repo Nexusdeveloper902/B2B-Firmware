@@ -300,6 +300,27 @@ first line only):
 
 ---
 
+## Phone taps (Android HCE) — same flow, no new steps
+
+A phone running the Pulse HCE app (`B2B-App/pulse-credential`) pairs
+and taps through this exact flow — arm, PAIRING mode, tap within the
+window — with two device-side differences, both automatic:
+
+1. Hold the phone steady 1–2 s on the antenna (ISO-DEP activation +
+   two APDUs take longer than a MIFARE UID read).
+2. The serial shows the HCE lines (`ISO-DEP target … ignored as
+   identity` → `HCE credential authenticated: <credId>`) instead of a
+   hex UID, and the pair call carries `"credential_kind": "hce"`
+   (stored as `cards.kind`; the desk badges it “Phone”).
+
+Everything else — 409 with no session, 422 never-reassign, one-shot
+consumption, immediate tap-after-pair — is identical, because the
+phone's application-level credential id IS the `credential_uid`.
+`HCE authentication FAILED` means the phone and the reader disagree on
+`HCE_SECRET` (compare with `B2B-App/pulse-credential`). The phone's RF
+UID is never identity (Android randomizes it per tap). Full byte-level
+spec: [HCE_PROTOCOL.md](HCE_PROTOCOL.md).
+
 ## What every outcome means
 
 `parsePairResponse` decides on the HTTP status; the backend `message` is
@@ -355,6 +376,19 @@ quotes.
 and that nobody else's tap consumed the session (each is one-shot). If the
 backend sets `PAIRING_WINDOW_SECONDS` lower than 45, the real window is
 that value (the device's guidance text mirrors the default only).
+
+**A different UID on every tap, starting with `08` (e.g. `0822D6DD`,
+`08A728CE`, `08727223`)** — that is NOT a MIFARE card, it is a phone
+WITHOUT the HCE app engaged. `08…` is the NFC Forum Random-ID prefix:
+Android answers anticollision with a fresh random UID per tap when no
+HCE service handles the tap, and SAK bit 6 stays clear so the reader
+correctly takes the MIFARE path. Pairing such a UID burns the session
+on garbage (it will never tap again — unpair that row from the desk).
+Fix: install/open `B2B-App/pulse-credential` (`READY TO TAP`), NFC on,
+screen on, hold steady 1–2 s — the serial must show `ISO-DEP target` +
+`HCE credential authenticated: <credId>`, never `[NFC] card: 08…`. If it
+was genuinely a physical card, the card or the RF field is faulty (a
+real MIFARE UID never changes) — try another card and check 3.3 V power.
 
 **`[422]` with a brand-new card** — the UID is not actually fresh: it was
 paired earlier (this bench, the seeder, or another reader). UIDs are

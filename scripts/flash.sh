@@ -11,6 +11,7 @@
 #   ./scripts/flash.sh                    # station (esp32cam, default)
 #   ./scripts/flash.sh --esp32            # reader (esp32dev)
 #   ./scripts/flash.sh --esp32cam         # camera station (esp32cam)
+#   ./scripts/flash.sh --cam-reader       # reader on an ESP32-CAM, no camera (esp32cam-reader)
 #   ./scripts/flash.sh --mock             # mock reader (esp32dev-mock)
 #   ./scripts/flash.sh --board esp32cam --port /dev/ttyUSB0 --monitor
 #   ./scripts/flash.sh --board esp32cam -- <extra pio args>
@@ -30,13 +31,15 @@ while [ $# -gt 0 ]; do
         -h|--help) usage; exit 0 ;;
         --esp32|--reader) ENV="esp32dev"; shift ;;
         --esp32cam|--cam) ENV="esp32cam"; shift ;;
+        --cam-reader) ENV="esp32cam-reader"; shift ;;
         --mock) ENV="esp32dev-mock"; shift ;;
         --board|--env|-e)
             case "${2:-}" in
                 esp32|reader|esp32dev) ENV="esp32dev" ;;
                 esp32cam|cam) ENV="esp32cam" ;;
+                cam-reader|esp32cam-reader) ENV="esp32cam-reader" ;;
                 mock|esp32dev-mock) ENV="esp32dev-mock" ;;
-                *) echo "unknown board: '${2:-}' (want: esp32 | esp32cam | mock)"; exit 2 ;;
+                *) echo "unknown board: '${2:-}' (want: esp32 | esp32cam | cam-reader | mock)"; exit 2 ;;
             esac
             shift 2 ;;
         --port) PORT="${2:-}"; shift 2 ;;

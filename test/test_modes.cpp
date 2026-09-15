@@ -31,6 +31,27 @@ void test_pairing_mode_routes_tap_to_pair_endpoint(void) {
     TEST_ASSERT_NULL(strstr(call.jsonBody.c_str(), "client_timestamp"));
 }
 
+void test_pairing_mode_forwards_hce_kind(void) {
+    Presence::PairingMode mode;
+    Presence::ApiCall call = mode.onCardTap("TEST-ANDROID-001", "hce");
+
+    TEST_ASSERT_EQUAL_STRING("/api/v1/admin/cards/pair", call.path.c_str());
+    TEST_ASSERT_NOT_NULL(strstr(call.jsonBody.c_str(), "TEST-ANDROID-001"));
+    TEST_ASSERT_NOT_NULL(strstr(call.jsonBody.c_str(), "\"credential_kind\""));
+    TEST_ASSERT_NOT_NULL(strstr(call.jsonBody.c_str(), "hce"));
+}
+
+void test_operation_mode_ignores_credential_kind(void) {
+    // The tap lookup is credential_uid-only by design (RF UID ≠ identity),
+    // so the kind never reaches the tap wire format — even for phones.
+    Presence::OperationMode mode;
+    Presence::ApiCall call = mode.onCardTap("TEST-ANDROID-001", "hce");
+
+    TEST_ASSERT_EQUAL_STRING("/api/v1/events/tap", call.path.c_str());
+    TEST_ASSERT_NOT_NULL(strstr(call.jsonBody.c_str(), "TEST-ANDROID-001"));
+    TEST_ASSERT_NULL(strstr(call.jsonBody.c_str(), "credential_kind"));
+}
+
 void test_mode_labels_are_bilingual(void) {
     Presence::OperationMode op;
     Presence::PairingMode pair;
@@ -162,6 +183,8 @@ void test_mode_hints_bilingual_distinct_nonempty(void) {
 void runModeTests() {
     RUN_TEST(test_operation_mode_routes_tap_to_events_endpoint);
     RUN_TEST(test_pairing_mode_routes_tap_to_pair_endpoint);
+    RUN_TEST(test_pairing_mode_forwards_hce_kind);
+    RUN_TEST(test_operation_mode_ignores_credential_kind);
     RUN_TEST(test_mode_labels_are_bilingual);
     RUN_TEST(test_mode_kind_polymorphism);
     RUN_TEST(test_pairing_hint_teaches_arm_first_flow);
