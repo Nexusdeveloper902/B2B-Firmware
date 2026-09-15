@@ -35,6 +35,18 @@ public:
                  uint32_t timeoutMs = 10000)
         : baseUrl_(baseUrl), bearerKey_(bearerKey), timeoutMs_(timeoutMs) {}
 
+    /** TASK-013: point at a newly discovered backend without rebuilding.
+     *  The compiled API_BASE_URL stays the boot fallback; discovery owns
+     *  the runtime value. / Apunta a un backend redescubierto en caliente. */
+    void setBaseUrl(const std::string& baseUrl) {
+        baseUrl_ = baseUrl;
+    }
+
+    /** Effective base URL (discovered, or the compiled fallback). */
+    const std::string& baseUrl() const {
+        return baseUrl_;
+    }
+
     HttpResponse post(const std::string& path, const std::string& jsonBody) override {
         return post(path, jsonBody, "application/json");
     }

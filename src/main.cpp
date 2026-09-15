@@ -74,6 +74,7 @@
 #include "LedFeedbackController.h"
 #endif
 #include "EspApiClient.h"
+#include "PulseDiscovery.h"
 #include "WifiService.h"
 
 using namespace Presence;
@@ -84,6 +85,10 @@ using namespace Presence;
 static WifiService wifi(WIFI_SSID, WIFI_PASSWORD,
                         WIFI_CONNECT_TIMEOUT_MS, WIFI_RECONNECT_INTERVAL_MS);
 static EspApiClient api(API_BASE_URL, READER_API_KEY, HTTP_TIMEOUT_MS);
+// TASK-013: the backend address is discovered (_pulse._tcp.local); the
+// compiled API_BASE_URL is only the boot fallback. / La dirección del
+// backend se descubre; API_BASE_URL solo es el valor inicial.
+static PulseDiscovery discovery;
 #if defined(READER_ON_CAM_BOARD)
 // env esp32cam-reader: no free GPIOs for MODE/EVENT LEDs + buzzer on the
 // CAM board — the onboard red LED shows both by precedence (events preempt
@@ -114,6 +119,8 @@ static OperationMode operationMode;
 static PairingMode pairingMode;
 static Mode* mode = nullptr;  // boots OPERATION; toggled by the console password
 
+static void discoverPulseServer();  // TASK-013: defined below, used by setup()
+
 // ---------------------------------------------------------------------------
 // Boot / Arranque
 // ---------------------------------------------------------------------------
@@ -132,7 +139,7 @@ static void printBanner() {
     Serial.print("Mode / Modo: ");
     Serial.println(mode->label());
     Serial.print("Backend: ");
-    Serial.println(API_BASE_URL);
+    Serial.println(api.baseUrl().c_str());  // effective URL: discovered, or the compiled fallback
     Serial.println("---- type the MODE PASSWORD + Enter to switch modes / escribe la");
     Serial.println("     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----");
 #if defined(PRESENCE_READER_IMPL_RC522)
@@ -186,6 +193,8 @@ void setup() {
         Serial.println("NOT connected yet — retrying in background /");
         Serial.println("aun no conectado — reintentando en segundo plano");
     }
+
+    discoverPulseServer();  // TASK-013: DNS-SD first, compiled fallback kept
 
     // Continuous mode indication from here on (not just at boot).
     feedback.indicate(mode->kind() == ModeKind::Pairing ? FeedbackKind::IdlePairing
@@ -304,6 +313,55 @@ static void pollConsole(uint32_t now) {
 // the endpoint, the parser+interpreter decide the feedback)
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Pulse service discovery (TASK-013) — _pulse._tcp.local
+// ---------------------------------------------------------------------------
+// Boot: bounded DNS-SD queries, then the compiled API_BASE_URL fallback so
+// the device never bricks when the advertisement is missing. Runtime: any
+// transport failure re-queries (cooldown-guarded, no multicast storms) and
+// re-points the HTTP layer — a DHCP-rotated backend is picked up with no
+// reboot, no reflash, no config edit. The failed POST itself is NOT
+// retried: taps are not idempotent (a timeout may follow a committed
+// event), so the tap reports NetworkError now and the NEXT tap uses the
+// fresh endpoint. / Al arrancar: consultas acotadas y luego el valor
+// compilado. En ejecución: todo fallo de transporte rediscoverea y
+// re-apunta el HTTP — sin reiniciar ni reflashear. El POST fallido NO se
+// reintenta (un timeout puede seguir a un evento ya guardado).
+static void discoverPulseServer() {
+    discovery.begin("pulse-reader");
+    if (!wifi.isConnected()) {
+        return;  // offline: the fallback stays until Wi-Fi is up
+    }
+    for (int attempt = 0; attempt < PULSE_DISCOVERY_BOOT_ATTEMPTS; ++attempt) {
+        const PulseEndpoint endpoint = discovery.discover();
+        if (endpoint.valid) {
+            api.setBaseUrl(endpoint.baseUrl());
+            Serial.print("[DISC] Pulse backend / backend Pulse: ");
+            Serial.println(endpoint.baseUrl().c_str());
+            return;
+        }
+    }
+    Serial.print("[DISC] no Pulse service (" PULSE_MDNS_LABEL ") — fallback / ");
+    Serial.print("sin servicio Pulse (" PULSE_MDNS_LABEL ") — reserva: ");
+    Serial.println(api.baseUrl().c_str());
+}
+
+static HttpResponse postToBackend(const std::string& path,
+                                  const std::string& jsonBody) {
+    HttpResponse response = api.post(path, jsonBody);
+    if (!response.transportOk) {
+        PulseEndpoint endpoint;
+        if (discovery.refreshIfDue(millis(), PULSE_REDISCOVER_COOLDOWN_MS,
+                                   endpoint) &&
+            endpoint.valid) {
+            api.setBaseUrl(endpoint.baseUrl());
+            Serial.print("[DISC] backend re-discovered / backend redescubierto: ");
+            Serial.println(endpoint.baseUrl().c_str());
+        }
+    }
+    return response;
+}
+
 // TASK-004: a 401 is always a key-PROVISIONING failure (the backend has
 // no readers row matching this READER_API_KEY) — point the operator at
 // the fix instead of a bare rejection. Printed for both modes.
@@ -326,8 +384,9 @@ static void handleCardTap(const std::string& uid) {
     //    lookup is credential_uid-only on purpose (RF UID ≠ identity).
     ApiCall call = mode->onCardTap(uid, reader.lastKind());
 
-    // 2) Transport (never throws; failures → status < 0).
-    HttpResponse response = api.post(call.path, call.jsonBody);
+    // 2) Transport (never throws; failures → status < 0; a failure also
+    //    triggers a cooldown-guarded rediscovery for the NEXT tap).
+    HttpResponse response = postToBackend(call.path, call.jsonBody);
 
     // 3) Locale-independent parsing + mode-specific interpretation.
     if (call.type == ApiCallType::Tap) {
@@ -417,6 +476,7 @@ void loop() {
     const uint32_t now = millis();
 
     wifi.tick(now);
+    discovery.begin("pulse-reader");  // late Wi-Fi: start mDNS once it associates
     feedback.tick(now);
     pollConsole(now);  // TASK-003: serial input → console dispatch
 

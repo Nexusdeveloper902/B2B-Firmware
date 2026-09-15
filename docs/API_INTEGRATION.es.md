@@ -13,8 +13,15 @@ firmware.
 
 ## Convenciones comunes
 
-- **URL base**: `API_BASE_URL` en `include/secrets.h` (p. ej.
-  `http://192.168.1.50:8000` — sin barra final).
+- **URL base**: descubierta al arrancar vía DNS-SD (`_pulse._tcp.local`,
+  anunciado por `./run serve` de B2B-Core — `lib/PulseDiscovery`, política
+  en `PresenceCore/PulseEndpoint.h`, fijada por `test_pulse_endpoint.cpp`).
+  `API_BASE_URL` en `include/secrets.h` (p. ej. `http://192.168.1.50:8000`
+  — sin barra final) es solo la reserva inicial cuando el descubrimiento
+  no encuentra nada. Todo fallo de transporte reconsulta (con espera
+  mínima) y re-apunta el cliente, así un backend con IP rotada por DHCP
+  se retoma sin reiniciar ni reflashear; el POST fallido nunca se reintenta
+  (los toques no son idempotentes).
 - **Autenticación**: `Authorization: Bearer <READER_API_KEY>`. La clave ES
   la identidad del lector; el backend jamás confía en un id de lector
   suministrado por el cliente. La clave la imprime el DemoSeeder de

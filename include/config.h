@@ -25,4 +25,4 @@
 // on every behavior-changing flash so serial logs self-identify (we
 // lost rounds to testing stale builds). Format hce.<n>, counting the
 // HCE bench flashes that preceded the scheme.
-#define PULSE_FW_BUILD "hce.15"
+#define PULSE_FW_BUILD "hce.16"  // TASK-013: mDNS service discovery (_pulse._tcp.local)

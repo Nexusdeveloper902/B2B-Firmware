@@ -11,8 +11,15 @@ works identically, whether Postman, curl, a test, or this firmware.
 
 ## Common conventions
 
-- **Base URL**: from `API_BASE_URL` in `include/secrets.h` (e.g.
-  `http://192.168.1.50:8000` — no trailing slash).
+- **Base URL**: discovered at boot via DNS-SD (`_pulse._tcp.local`,
+  advertised by B2B-Core `./run serve` — `lib/PulseDiscovery`, policy in
+  `PresenceCore/PulseEndpoint.h`, pinned by `test_pulse_endpoint.cpp`).
+  `API_BASE_URL` in `include/secrets.h` (e.g. `http://192.168.1.50:8000`
+  — no trailing slash) is only the boot fallback when discovery finds
+  nothing. Any transport failure re-queries (cooldown-guarded) and
+  re-points the client, so a DHCP-rotated backend is picked up with no
+  reboot or reflash; the failed POST itself is never retried (taps are
+  not idempotent).
 - **Auth**: `Authorization: Bearer <READER_API_KEY>`. The key IS the
   reader identity; the backend never trusts a client-supplied reader id.
   The key is printed by the B2B-Core DemoSeeder (`./run setup`).

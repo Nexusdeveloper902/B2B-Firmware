@@ -21,6 +21,7 @@ void runCaptureTriggerTests();
 void runCapturePayloadTests();
 void runStationConfigTests();
 void runCamReaderConfigTests();
+void runPulseEndpointTests();
 
 // Shared by every test (Unity calls these around each RUN_TEST).
 void setUp() {}
@@ -40,6 +41,7 @@ int main() {
     runCapturePayloadTests();  // TASK-008: multipart wire bytes + associate JSON
     runStationConfigTests();   // station hardware map + station feedback
     runCamReaderConfigTests(); // esp32cam-reader: station RC522 pins, no camera/DevKit pins
+    runPulseEndpointTests(); // TASK-013: discovered-endpoint selection + fallback parse
 
     return UNITY_END();
 }

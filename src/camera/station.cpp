@@ -136,6 +136,8 @@ void Station::begin() {
         Serial.println("aun no conectado — reintentando en segundo plano");
     }
 
+    discoverPulseServer();  // TASK-013: DNS-SD first, compiled fallback kept
+
     setupRoutes();
     server_.begin();
 
@@ -159,7 +161,7 @@ void Station::printBanner() {
     Serial.print("Mode / Modo: ");
     Serial.println(mode_->label());
     Serial.print("Backend: ");
-    Serial.println(API_BASE_URL);
+    Serial.println(api_.baseUrl().c_str());  // effective URL: discovered, or the compiled fallback
     Serial.println();
     Serial.println("[EN] Serial commands / [ES] Comandos seriales:");
     Serial.println("  TAP CARD         closes pending capture (associate) — else arms card-first, auto-captures after a delay (BUTTON/ENTER now) / tocar tarjeta cierra captura pendiente — si no, arma y auto-captura tras la espera (BOTÓN/ENTER ya)");
@@ -186,6 +188,7 @@ void Station::update() {
     const uint32_t now = millis();
 
     wifi_.tick(now);
+    discovery_.begin("pulse-station");  // late Wi-Fi: start mDNS once it associates
     led_.tick(now);
     server_.handleClient();
     expireStaleTransactions(now);  // anti-steal windows, before any tap/button use
@@ -428,6 +431,47 @@ void Station::flagCameraFailure() {
     }
 }
 
+// TASK-013: boot discovery (bounded, then the compiled fallback) plus the
+// single runtime choke point — a transport failure re-queries _pulse._tcp
+// (cooldown-guarded) and re-points the HTTP layer, so a DHCP-rotated
+// backend is picked up with no reboot. The failed POST is NOT retried.
+void Station::discoverPulseServer() {
+    discovery_.begin("pulse-station");
+    if (!wifi_.isConnected()) {
+        return;  // offline: the fallback stays until Wi-Fi is up
+    }
+    for (int attempt = 0; attempt < PULSE_DISCOVERY_BOOT_ATTEMPTS; ++attempt) {
+        const PulseEndpoint endpoint = discovery_.discover();
+        if (endpoint.valid) {
+            api_.setBaseUrl(endpoint.baseUrl());
+            Serial.print("[DISC] Pulse backend / backend Pulse: ");
+            Serial.println(endpoint.baseUrl().c_str());
+            return;
+        }
+    }
+    Serial.print("[DISC] no Pulse service (" PULSE_MDNS_LABEL ") — fallback / ");
+    Serial.print("sin servicio Pulse (" PULSE_MDNS_LABEL ") — reserva: ");
+    Serial.println(api_.baseUrl().c_str());
+}
+
+HttpResponse Station::post(const std::string& path, const std::string& body,
+                           const std::string& contentType) {
+    HttpResponse response = !contentType.empty()
+                                ? api_.post(path, body, contentType)
+                                : api_.post(path, body);
+    if (!response.transportOk) {
+        PulseEndpoint endpoint;
+        if (discovery_.refreshIfDue(millis(), PULSE_REDISCOVER_COOLDOWN_MS,
+                                    endpoint) &&
+            endpoint.valid) {
+            api_.setBaseUrl(endpoint.baseUrl());
+            Serial.print("[DISC] backend re-discovered / backend redescubierto: ");
+            Serial.println(endpoint.baseUrl().c_str());
+        }
+    }
+    return response;
+}
+
 void Station::doCaptureAndUpload() {
     if (!captureHighResolution()) {
         return;  // capture failure IS the clear failure state (spec §8)
@@ -450,7 +494,7 @@ void Station::doCaptureAndUpload() {
             Serial.printf("[ES] Clasificación tarjeta-primero para el evento %ld...\n", armedEventId_);
             std::string body = CapturePayload::classifyWithEvent(
                 armedEventId_, latestCapture_, latestCaptureSize_);
-            HttpResponse r = api_.post("/api/v1/recycling/classify", body, CapturePayload::contentType());
+            HttpResponse r = post("/api/v1/recycling/classify", body, CapturePayload::contentType());
             reportUpload("classify", r.status, String(r.body.c_str()), r.transportOk);
             if (r.transportOk && r.status == 200) {
                 armedEventId_ = -1;  // one-shot on SUCCESS only: never re-classify a stale event by accident
@@ -472,7 +516,7 @@ void Station::doCaptureAndUpload() {
     Serial.println("[EN] Bottle-first capture: uploading image (no card yet)...");
     Serial.println("[ES] Captura botella-primero: subiendo imagen (sin tarjeta aún)...");
     std::string body = CapturePayload::imageOnly(latestCapture_, latestCaptureSize_);
-    HttpResponse r = api_.post("/api/v1/recycling/capture", body, CapturePayload::contentType());
+    HttpResponse r = post("/api/v1/recycling/capture", body, CapturePayload::contentType());
     reportUpload("capture", r.status, String(r.body.c_str()), r.transportOk);
 
     if (!r.transportOk || r.status != 200) {
@@ -504,7 +548,7 @@ void Station::doAssociate(const std::string& uid) {
     const long target = backendCaptureId_;
     std::string body = buildAssociatePayload(uid);
     std::string path = "/api/v1/recycling/captures/" + std::to_string(target) + "/associate";
-    HttpResponse r = api_.post(path, body);
+    HttpResponse r = post(path, body);
     reportUpload("associate", r.status, String(r.body.c_str()), r.transportOk);
     if (r.transportOk && r.status == 200) {
         backendCaptureId_ = -1;  // resolved — next tap arms a new card-first
@@ -765,7 +809,7 @@ void Station::handleCardTap(const std::string& uid) {
         doAssociate(uid);
         return;
     }
-    HttpResponse response = api_.post(call.path, call.jsonBody);
+    HttpResponse response = post(call.path, call.jsonBody);
 
     if (call.type == ApiCallType::Tap) {
         TapResult result = parseTapResponse(response.status, response.body);

@@ -14,6 +14,12 @@
 #define WIFI_RECONNECT_INTERVAL_MS     10000  // retry cadence after a drop
 #define HTTP_TIMEOUT_MS                10000  // per-request HTTP timeout
 
+// --- Pulse service discovery (TASK-013, _pulse._tcp.local) ------------------
+// One DNS-SD query blocks ~3 s inside the ESP-IDF core, so discovery runs
+// ONLY at boot and on transport failure — never per tap, never on a timer.
+#define PULSE_DISCOVERY_BOOT_ATTEMPTS    2      // queries at boot, then the compiled fallback
+#define PULSE_REDISCOVER_COOLDOWN_MS     15000  // min gap between failure-triggered re-queries
+
 // --- NFC reader ------------------------------------------------------------
 #define RC522_REINIT_INTERVAL_MS  5000  // PCD_Init retry cadence (see Rc522NfcReader)
 

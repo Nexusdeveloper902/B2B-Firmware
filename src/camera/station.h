@@ -58,6 +58,7 @@
 #include "Modes.h"
 #include "NfcReader.h"
 #include "PayloadBuilder.h"
+#include "PulseDiscovery.h"
 #include "Rc522NfcReader.h"
 #include "TsLog.h"  // millis() prefix on reader diagnostics (bench correlation)
 #include "ResponseParser.h"
@@ -88,6 +89,15 @@ private:
     void handleCardTap(const std::string& uid);
     void printReaderKeyRemediation();
 
+    // --- Pulse service discovery (TASK-013, _pulse._tcp.local) -------------
+    void discoverPulseServer();  // boot: DNS-SD first, compiled fallback kept
+    // Single HTTP choke point: every backend POST here runs through it, so
+    // a transport failure triggers one cooldown-guarded rediscovery for all
+    // callers (tap, capture, classify, associate) instead of per-callsite
+    // guards. The failed POST is NOT retried (not idempotent).
+    HttpResponse post(const std::string& path, const std::string& body,
+                      const std::string& contentType = "");
+
     // --- capture / upload (moved from the camera station, intact) ---------
     void freeLatestCapture();
     bool captureHighResolution();
@@ -112,6 +122,7 @@ private:
     StationLed led_;
     WifiService wifi_;
     EspApiClient api_;
+    PulseDiscovery discovery_;  // TASK-013: backend address via DNS-SD
     // Declared before nfc_: members construct in declaration order.
     TsLog tsLog_{Serial};  // timestamped diagnostics sink (bench ask)
     Rc522NfcReader nfc_;

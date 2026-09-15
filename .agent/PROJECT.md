@@ -158,6 +158,20 @@ ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
   esp32cam builds SUCCESS, Android 3/3 + debug APK. Human bench §10
   pending (no hardware in agent runs).
 
+## TASK-013 delivery (2026-09-15, RUN-2026-09-15-firmware-016)
+
+- No more hard-coded backend IP (ADR-015): `lib/PulseDiscovery`
+  (ESPmDNS, in-core, the single mDNS touchpoint) discovers
+  `_pulse._tcp.local` at boot (bounded, then the compiled `API_BASE_URL`
+  fallback) and re-queries after any transport failure
+  (15 s cooldown, failed POSTs never retried — taps aren't idempotent).
+  Selection policy + `protocol`-TXT gate in host-tested
+  `PresenceCore/PulseEndpoint.h` (native 118/118, +6); one HTTP choke
+  point per image (`postToBackend`, `Station::post`); all four board envs
+  build. No NVS cache (none exists; forbidden to invent), no WS migration
+  (no WS client in firmware), `pulse.local` never assumed. Backend half:
+  B2B-Core TASK-043. Bench rotation test pending.
+
 ## TASK-012 delivery (2026-09-15)
 
 - New opt-in env `esp32cam-reader` (ADR-014): the reader image
