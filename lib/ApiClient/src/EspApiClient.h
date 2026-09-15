@@ -2,7 +2,10 @@
  * EspApiClient.h — ApiClient over the ESP32 Arduino HTTPClient.
  * EspApiClient.h — ApiClient sobre HTTPClient de Arduino para ESP32.
  *
- * - Authorization: Bearer <READER_API_KEY> (the reader's whole identity)
+ * - Authorization: Pulse-HMAC <kid>:<nonce>:<sig> (ADR-016): every POST
+ *   is signed with the reader secret and a fresh esp_random nonce. The
+ *   secret itself NEVER rides the wire — a hotspot capture holds one
+ *   single-use signature, useless for impersonation or replay.
  * - Content-Type: application/json
  * - Fixed timeout (config.h: HTTP_TIMEOUT_MS)
  * - Never throws; transport failures return status < 0 so the caller maps
@@ -24,16 +27,18 @@
 
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include <esp_system.h>  // esp_random() — fresh signing nonce per request
 
 #include "ApiClient.h"
+#include "RequestSigner.h"
 
 namespace Presence {
 
 class EspApiClient : public ApiClient {
 public:
-    EspApiClient(const std::string& baseUrl, const std::string& bearerKey,
+    EspApiClient(const std::string& baseUrl, const std::string& deviceSecret,
                  uint32_t timeoutMs = 10000)
-        : baseUrl_(baseUrl), bearerKey_(bearerKey), timeoutMs_(timeoutMs) {}
+        : baseUrl_(baseUrl), deviceSecret_(deviceSecret), timeoutMs_(timeoutMs) {}
 
     /** TASK-013: point at a newly discovered backend without rebuilding.
      *  The compiled API_BASE_URL stays the boot fallback; discovery owns
@@ -51,11 +56,27 @@ public:
         return post(path, jsonBody, "application/json");
     }
 
-    /** POST raw bytes (e.g. multipart image bodies) with an explicit
-     *  Content-Type. Same Bearer identity, timeout and never-throw
-     *  contract as post(). / POST de bytes con Content-Type explícito. */
+    /** POST raw bytes (e.g. JSON bodies) with an explicit Content-Type.
+     *  Signs the exact bytes sent. / POST de bytes con Content-Type
+     *  explícito, firmando los bytes enviados. */
     HttpResponse post(const std::string& path, const std::string& body,
                       const std::string& contentType) {
+        return doPost(path, body, contentType, body);
+    }
+
+    /** POST multipart image bytes signed over the multipart canonical
+     *  (event_id + sha256(image)), NOT the wire bytes: PHP never sees raw
+     *  multipart (php://input is empty), so the backend reconstructs the
+     *  same canonical from the parsed upload. Callers build the canonical
+     *  with CapturePayload::classifySigningBody()/captureSigningBody(). */
+    HttpResponse postMultipart(const std::string& path, const std::string& body,
+                               const std::string& contentType,
+                               const std::string& signingBody) {
+        return doPost(path, body, contentType, signingBody);
+    }
+
+    HttpResponse doPost(const std::string& path, const std::string& body,
+                        const std::string& contentType, const std::string& signingBody) {
         HttpResponse response;
 
         HTTPClient http;
@@ -69,15 +90,15 @@ public:
         http.setTimeout(timeoutMs_);
         http.addHeader("Content-Type", contentType.c_str());
         http.addHeader("Accept", "application/json");
-        // TASK-007: explicit Authorization VALUE — see the header comment.
-        // addHeader is safe here: setAuthorization() is never called, so
-        // HTTPClient's built-in auth block stays empty and this is the
-        // single Authorization header on the wire.
-        // / TASK-007: VALOR de Authorization explicito — ver la cabecera.
-        // addHeader es seguro: nunca se llama a setAuthorization(), asi
-        // que esta es la unica cabecera Authorization en el cable.
+        // ADR-016 + TASK-007: explicit Authorization VALUE — the literal
+        // scheme lives in PresenceCore's RequestSigner (host-tested) so a
+        // transport-only regression cannot hide here again. addHeader is
+        // safe: setAuthorization() is never called, so HTTPClient's
+        // built-in auth block stays empty and this is the single
+        // Authorization header on the wire.
+        // / VALOR de Authorization explicito y FIRMADO por peticion.
         http.addHeader("Authorization",
-                       bearerAuthorizationValue(bearerKey_).c_str());
+                       signedAuthorizationValue(path, signingBody).c_str());
 
         // Byte-array POST (not the const-char* overload): multipart bodies
         // carry binary JPEG bytes that may contain NULs. The bytes go
@@ -99,8 +120,28 @@ public:
     }
 
 private:
+    /** Fresh 128-bit nonce per request, hex. Replays 401 server-side. */
+    static std::string freshNonce() {
+        uint8_t raw[16];
+        for (int i = 0; i < 4; i++) {
+            const uint32_t r = esp_random();
+            raw[4 * i] = static_cast<uint8_t>(r >> 24);
+            raw[4 * i + 1] = static_cast<uint8_t>(r >> 16);
+            raw[4 * i + 2] = static_cast<uint8_t>(r >> 8);
+            raw[4 * i + 3] = static_cast<uint8_t>(r);
+        }
+        return Signer::toHex(raw, sizeof(raw));
+    }
+
+    /** Pulse-HMAC value over the signing body (raw bytes for JSON, the
+     *  multipart canonical for image posts — see postMultipart). */
+    std::string signedAuthorizationValue(const std::string& path,
+                                          const std::string& body) const {
+        return Signer::authorizationValue(deviceSecret_, "POST", path, freshNonce(), body);
+    }
+
     std::string baseUrl_;
-    std::string bearerKey_;
+    std::string deviceSecret_;  // READER_API_KEY: signing key, never transmitted
     uint32_t timeoutMs_;
 };
 

@@ -170,7 +170,8 @@ The station's `esp32cam` env (camera + RC522 over SPI) is documented in
 ## Flashing
 
 ```bash
-cp include/secrets.h.example include/secrets.h   # then edit: Wi-Fi, backend URL, reader key, MODE_PASSWORD
+cp include/secrets.h.example include/secrets.h   # DevKit reader (esp32dev / esp32dev-mock) — then edit: Wi-Fi, backend URL, reader key, MODE_PASSWORD
+cp include/secrets.cam_reader.h.example include/secrets.cam_reader.h   # CAM reader (esp32cam-reader) — OWN file, different READER_API_KEY
 
 # The reader env is OPT-IN since ADR-010 — the default env is the camera
 # station `esp32cam`, and a bare `pio run -t upload` would flash the
@@ -202,6 +203,7 @@ connected. It is not the station: no capture, no shutter, no visualizer.
 | Feedback | onboard red LED on **GPIO33** only (active-LOW; `PIN_STATION_LED_ACTIVE_LOW` flips inverted clones). Mode heartbeat and one-shot event patterns share it — an event preempts the heartbeat, which resumes afterwards. Same patterns as the [LED pattern reference](#led-pattern-reference). |
 | Buzzer | none — the CAM board has no free header GPIO for it |
 | Untouched pins | GPIO4 (flash LED), GPIO12 (MTDI strap), GPIO16 (PSRAM), GPIO1/3 (serial console) |
+| Secrets | OWN file `include/secrets.cam_reader.h` (from `secrets.cam_reader.h.example`) — different `READER_API_KEY` from the DevKit reader's `secrets.h` and the station's `secrets.camera.h` |
 | Monitor | `pio device monitor -e esp32cam-reader` (keeps `monitor_dtr=0`/`monitor_rts=0`, required by the AI-Thinker auto-download circuit) |
 
 The boot banner adds `Board: ESP32-CAM (reader only, no camera …)` so
@@ -223,7 +225,7 @@ Reader impl / Implementacion: RC522 (SPI)
 Mode / Modo: OPERATION / OPERACION
 [NFC] RC522 detected — firmware version 0x92 / detectado
 ---- type the MODE PASSWORD + Enter to switch modes / escribe la
-     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----
+     CLAVE DE MODO + Enter para cambiar de modo (secrets.h / secrets.cam_reader.h on esp32cam-reader) ----
 ---- present a card to the reader / presenta una tarjeta al lector ----
 ```
 

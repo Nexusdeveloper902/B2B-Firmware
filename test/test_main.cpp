@@ -17,6 +17,7 @@ void runModeTests();
 void runDebounceTests();
 void runConsoleTests();
 void runAuthTests();
+void runRequestSignerTests();
 void runCaptureTriggerTests();
 void runCapturePayloadTests();
 void runStationConfigTests();
@@ -37,6 +38,7 @@ int main() {
     runDebounceTests();   // card debounce + LED patterns/players
     runConsoleTests();    // TASK-003: serial console (LineBuffer + ModeConsole)
     runAuthTests();       // TASK-007: Authorization header VALUE (Bearer)
+    runRequestSignerTests();  // ADR-016: Pulse-HMAC signed Authorization VALUE
     runCaptureTriggerTests();  // TASK-008: the capture trigger seam (line discipline + cooldown)
     runCapturePayloadTests();  // TASK-008: multipart wire bytes + associate JSON
     runStationConfigTests();   // station hardware map + station feedback

@@ -177,7 +177,8 @@ documentado en [docs/CAMERA_STATION.es.md](CAMERA_STATION.es.md).
 ## Flasheo
 
 ```bash
-cp include/secrets.h.example include/secrets.h   # luego edita: Wi-Fi, URL del backend, clave del lector, MODE_PASSWORD
+cp include/secrets.h.example include/secrets.h   # lector DevKit (esp32dev / esp32dev-mock) — luego edita: Wi-Fi, URL del backend, clave del lector, MODE_PASSWORD
+cp include/secrets.cam_reader.h.example include/secrets.cam_reader.h   # lector CAM (esp32cam-reader) — archivo PROPIO, distinto READER_API_KEY
 
 # El entorno del lector es OPTATIVO desde ADR-010 — el entorno por defecto
 # es la estación de cámara `esp32cam`, y un `pio run -t upload` simple
@@ -210,6 +211,7 @@ disparador, sin visualizador.
 | Retroalimentación | solo el LED rojo integrado en **GPIO33** (activo en BAJO; `PIN_STATION_LED_ACTIVE_LOW` corrige clones invertidos). El latido de modo y los patrones de evento lo comparten — un evento interrumpe el latido, que se reanuda después. Mismos patrones que la [referencia de patrones LED](#referencia-de-patrones-led). |
 | Zumbador | ninguno — la placa CAM no tiene un GPIO libre en el cabezal |
 | Pines intactos | GPIO4 (LED flash), GPIO12 (strap MTDI), GPIO16 (PSRAM), GPIO1/3 (consola serial) |
+| Secretos | Archivo PROPIO `include/secrets.cam_reader.h` (desde `secrets.cam_reader.h.example`) — distinto `READER_API_KEY` del `secrets.h` del DevKit y del `secrets.camera.h` de la estación |
 | Monitor | `pio device monitor -e esp32cam-reader` (mantiene `monitor_dtr=0`/`monitor_rts=0`, requerido por el circuito auto-download del AI-Thinker) |
 
 El banner de arranque añade `Board: ESP32-CAM (reader only, no camera …)`
@@ -232,7 +234,7 @@ Reader impl / Implementacion: RC522 (SPI)
 Mode / Modo: OPERATION / OPERACION
 [NFC] RC522 detected — firmware version 0x92 / detectado
 ---- type the MODE PASSWORD + Enter to switch modes / escribe la
-     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----
+     CLAVE DE MODO + Enter para cambiar de modo (secrets.h / secrets.cam_reader.h en esp32cam-reader) ----
 ---- present a card to the reader / presenta una tarjeta al lector ----
 ```
 

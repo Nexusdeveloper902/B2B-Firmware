@@ -43,8 +43,8 @@
 #include "config.h"
 
 // The HCE pre-shared key lives ONLY in the gitignored secrets files
-// (HCE_SECRET in secrets.h / secrets.camera.h — see the .example
-// templates). A secrets file written before the HCE era has none: keep
+// (HCE_SECRET in secrets.h / secrets.cam_reader.h / secrets.camera.h — see
+// the .example templates). A secrets file written before the HCE era has none: keep
 // compiling against the development-only prototype value (insecure
 // default + bilingual #warning) instead of breaking the user's local
 // file after a pull — same precedent as MODE_PASSWORD in main.cpp.

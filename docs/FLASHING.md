@@ -76,10 +76,11 @@ Unknown flags/boards exit with code 2 and a hint listing the valid names.
 
 ## Before you flash
 
-- Secrets must be provisioned for the board you target: reader +
-  station use `include/secrets.h` (from `secrets.h.example`); the camera
-  station additionally uses `include/secrets.camera.h` (from
-  `secrets.camera.h.example`). See `docs/HARDWARE_SETUP.md` /
+- Secrets must be provisioned for the board you target: the DevKit reader
+  uses `include/secrets.h` (from `secrets.h.example`); the CAM reader uses
+  `include/secrets.cam_reader.h` (from `secrets.cam_reader.h.example`,
+  different `READER_API_KEY`); the camera station uses
+  `include/secrets.camera.h` (from `secrets.camera.h.example`). See `docs/HARDWARE_SETUP.md` /
   `docs/CAMERA_STATION.md`.
 - `pio` (PlatformIO) must be on `PATH` — otherwise the script prints
   `platformio not found (pip install platformio)` and exits 1.

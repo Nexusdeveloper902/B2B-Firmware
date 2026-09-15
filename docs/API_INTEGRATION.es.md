@@ -22,21 +22,29 @@ firmware.
   mínima) y re-apunta el cliente, así un backend con IP rotada por DHCP
   se retoma sin reiniciar ni reflashear; el POST fallido nunca se reintenta
   (los toques no son idempotentes).
-- **Autenticación**: `Authorization: Bearer <READER_API_KEY>`. La clave ES
-  la identidad del lector; el backend jamás confía en un id de lector
+- **Autenticación**: `Authorization: Pulse-HMAC <kid>:<nonce>:<sig>`
+  (ADR-016). Cada POST se firma con `READER_API_KEY` y un nonce fresco de
+  `esp_random` (HMAC-SHA256 sobre método, ruta, nonce y hash del cuerpo;
+  las subidas de imagen firman el canónico multipart
+  `event_id + image.sha256`, no los bytes crudos — PHP nunca ve el
+  multipart crudo) —
+  la clave NUNCA viaja por la red, así que una captura del hotspot solo
+  contiene una firma de un solo uso: las repeticiones responden 401 y los
+  cuerpos redirigidos fallan. El backend jamás confía en un id de lector
   suministrado por el cliente. La clave la imprime el DemoSeeder de
   B2B-Core (`./run setup`).
-  TASK-007: el firmware construye esta cabecera **explícitamente** — el
-  prefijo literal `Bearer ` sale de `Presence::bearerAuthorizationValue()`
-  (PresenceCore, fijado por `test_auth.cpp`) y `EspApiClient` la envía con
-  `addHeader`. Nunca volver a `HTTPClient::setAuthorization(key)`: ese
-  método prefija su **tipo de autorización por defecto `Basic`**, el
-  backend ignora por completo `Authorization: Basic <clave>`, y todo el
-  hardware real recibía 401 con una clave perfectamente válida antes de
-  esta corrección (la verificación con curl nunca lo detectó — curl envía
-  la cabecera tal cual).
-- **Content-Type**: `application/json` (solo el endpoint de clasificación
-  usa multipart — no lo usa este firmware; ver «Fuera de alcance»).
+  El firmware construye esta cabecera **explícitamente** — el esquema
+  literal sale de `Presence::Signer::authorizationValue()` (PresenceCore,
+  fijado por `test_request_signer.cpp` contra el vector dorado de
+  B2B-Core) y `EspApiClient` la envía con `addHeader`. Nunca volver a
+  `HTTPClient::setAuthorization(key)`: ese método prefija su **tipo de
+  autorización por defecto `Basic`**, que el backend ignora por completo
+  (historia de TASK-007), y la ruta Bearer heredada del banco jamás debe
+  volver a los dispositivos.
+- **Content-Type**: `application/json` para JSON; la estación de cámara
+  sube imágenes como `multipart/form-data` vía `EspApiClient::postMultipart`
+  (firmado sobre el canónico multipart — ver arriba; bytes en
+  `CapturePayload`, canónico fijado por `test_capture_payload.cpp`).
 - **Localización**: el texto de los `message` de error lo localiza el
   backend vía `Accept-Language`. Por eso el firmware NUNCA decide por
   texto del mensaje — decide por código HTTP y campo `status`, y trata el
@@ -75,7 +83,7 @@ TASK-003).
 | HTTP | Significado en el backend | Resultado parseado | Retroalimentación |
 |---|---|---|---|
 | 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | LED EVENTO sólido 1.5 s (+ registro serial con estudiante y tipo; `next_step == "awaiting_classification"` se registra, nada más — la clasificación está fuera de alcance del lector (la estación ESP32-CAM auto-captura+clasifica con él — ver CAMERA_STATION.es.md) |
-| 401 | clave Bearer faltante/inválida → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 destellos rápidos |
+| 401 | firma mala / kid desconocido / nonce repetido → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 destellos rápidos |
 | 404 | tarjeta desconocida (`Card not recognized`) o inactiva (`Card is not active`) | `TapOutcome::CardNotRecognized` | 2 destellos; mensaje registrado |
 | 422 | error de validación | `TapOutcome::ValidationError` | sólido largo (estilo error de servidor) |
 | 5xx | error inesperado del servidor | `TapOutcome::ServerError` | sólido largo |
@@ -123,7 +131,7 @@ completa a nivel de bytes: [HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md).
 | HTTP | Significado en el backend | Resultado parseado | Retroalimentación |
 |---|---|---|---|
 | 200 | `{ "status": "ok", "paired_student_name": "Maria González", "student_id": 3 }` | `PairOutcome::Success` | LED EVENTO sólido 1.5 s; el registro serial nombra al estudiante |
-| 401 | clave Bearer faltante/inválida | `PairOutcome::AuthFailure` | 6 destello rápidos |
+| 401 | firma mala / kid desconocido / nonce repetido | `PairOutcome::AuthFailure` | 6 destello rápidos |
 | 409 | sin sesión de emparejamiento activa → `{ "status": "error", "message": "No pairing session active" }` | `PairOutcome::NoActiveSession` | 3 destellos; mensaje registrado |
 | 422 | tarjeta ya emparejada (o UID malformado) → `{ "status": "error", "message": "Card already paired" }` | `PairOutcome::AlreadyPaired` | 4 destellos; mensaje registrado |
 | 5xx / otro | inesperado | `ServerError` / `UnknownError` | sólido largo |

@@ -97,6 +97,13 @@ private:
     // guards. The failed POST is NOT retried (not idempotent).
     HttpResponse post(const std::string& path, const std::string& body,
                       const std::string& contentType = "");
+    // Multipart image posts: same choke point, but signed over the multipart
+    // canonical (CapturePayload signing bodies), not the wire bytes — PHP
+    // never sees raw multipart (php://input is empty). JSON posts keep
+    // signing the exact bytes via post().
+    HttpResponse postMultipart(const std::string& path, const std::string& body,
+                               const std::string& contentType,
+                               const std::string& signingBody);
 
     // --- capture / upload (moved from the camera station, intact) ---------
     void freeLatestCapture();

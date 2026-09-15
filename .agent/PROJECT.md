@@ -181,3 +181,19 @@ ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
   no buzzer. `scripts/flash.sh --cam-reader`.
 - Verification: native 112/112, all four board envs build. Bench flash
   pending.
+
+## TASK-014 delivery (2026-09-15, RUN-2026-09-15-firmware-017)
+
+- Station classify-401 fix (ADR-017): image posts sign the multipart
+  canonical, not the wire bytes PHP never sees —
+  `CapturePayload::classifySigningBody()` / `captureSigningBody()`
+  (`event_id + image.sha256` / `image.sha256`), byte-exact mirror of
+  B2B-Core `DeviceRequestSigner::multipartCanonical()` (shared
+  `sha256('abc')` literals pinned both sides). New
+  `EspApiClient::postMultipart()` + `Station::postMultipart()` choke
+  point (same rediscovery rule); tap/associate untouched. Build
+  `hce.17` → `hce.18`; `API_INTEGRATION.md` (+`.es.md`) updated.
+  Backend half: B2B-Core TASK-044 (ADR-063).
+- Verification: native 128/128 (+3), `esp32cam` + `esp32dev` SUCCESS.
+  Bench reflash to `hce.18` pending (tap → auto-capture →
+  `classify: HTTP 200`).

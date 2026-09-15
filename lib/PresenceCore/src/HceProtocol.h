@@ -79,6 +79,14 @@ void hmacSha256(const uint8_t* key, size_t keyLen,
                 uint8_t out[HMAC_LEN]);
 
 /**
+ * Raw SHA-256 of a byte string (same compact implementation the HMAC
+ * above is built on). Exposed for the device→backend request signer
+ * (RequestSigner), which needs sha256hex(body) — no second SHA-256
+ * copy lives anywhere in this repo.
+ */
+void sha256Bytes(const uint8_t* data, size_t len, uint8_t out[HMAC_LEN]);
+
+/**
  * Recomputes HMAC-SHA256(key, credId || nonce) and compares in constant
  * time. Secrets are never logged — callers must only log the boolean.
  */

@@ -195,6 +195,10 @@ void sha256(const uint8_t* data, size_t len, uint8_t out[32]) {
 
 }  // namespace
 
+void sha256Bytes(const uint8_t* data, size_t len, uint8_t out[HMAC_LEN]) {
+    sha256(data != nullptr ? data : reinterpret_cast<const uint8_t*>(""), len, out);
+}
+
 void hmacSha256(const uint8_t* key, size_t keyLen,
                 const uint8_t* msg, size_t msgLen,
                 uint8_t out[HMAC_LEN]) {

@@ -13,6 +13,8 @@ include/secrets.h
 secrets.h
 include/secrets.camera.h
 secrets.camera.h
+include/secrets.cam_reader.h
+secrets.cam_reader.h
 
 # Runtime / OS
 *.log

@@ -77,9 +77,10 @@ nombres válidos.
 
 ## Antes de flashear
 
-- Los secretos deben estar provisionados para la placa objetivo: el
-  lector y la estación usan `include/secrets.h` (desde
-  `secrets.h.example`); la estación de cámara además usa
+- Los secretos deben estar provisionados para la placa objetivo: el lector
+  DevKit usa `include/secrets.h` (desde `secrets.h.example`); el lector CAM
+  usa `include/secrets.cam_reader.h` (desde `secrets.cam_reader.h.example`,
+  distinto `READER_API_KEY`); la estación de cámara usa
   `include/secrets.camera.h` (desde `secrets.camera.h.example`). Ver
   `docs/HARDWARE_SETUP.es.md` / `docs/CAMERA_STATION.es.md`.
 - `pio` (PlatformIO) debe estar en el `PATH` — si no, el script imprime

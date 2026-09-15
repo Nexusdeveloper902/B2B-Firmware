@@ -99,6 +99,41 @@ static void associate_payload_matches_the_backend_contract() {
                              buildAssociatePayload("ABC123").c_str());
 }
 
+// Pulse-HMAC multipart canonical (the 401 fix): PHP never sees raw
+// multipart bytes, so image posts sign event_id + sha256(image) — the
+// exact strings B2B-Core DeviceRequestSigner::multipartCanonical()
+// reconstructs. sha256("abc") is the well-known
+// ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad.
+static void classify_signing_body_mirrors_the_backend_canonical() {
+    static const uint8_t ABC[] = {'a', 'b', 'c'};
+    std::string signing = CapturePayload::classifySigningBody(421, ABC, sizeof(ABC));
+    TEST_ASSERT_EQUAL_STRING(
+        "event_id=421\nimage.sha256=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        signing.c_str());
+}
+
+static void capture_signing_body_mirrors_the_backend_canonical() {
+    static const uint8_t ABC[] = {'a', 'b', 'c'};
+    std::string signing = CapturePayload::captureSigningBody(ABC, sizeof(ABC));
+    TEST_ASSERT_EQUAL_STRING(
+        "image.sha256=ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        signing.c_str());
+}
+
+// The signing hash is image-bound (one flipped byte -> different
+// canonical) and binary-safe (NULs are hashed, never truncated).
+static void signing_body_is_image_bound_and_binary_safe() {
+    static const uint8_t A[] = {'a', 'b', 'c'};
+    static const uint8_t B[] = {'a', 'b', 'd'};
+    static const uint8_t WITH_NUL[] = {'a', '\0', 'c'};
+    TEST_ASSERT_TRUE(CapturePayload::captureSigningBody(A, sizeof(A)) !=
+                     CapturePayload::captureSigningBody(B, sizeof(B)));
+    TEST_ASSERT_TRUE(CapturePayload::captureSigningBody(A, sizeof(A)) !=
+                     CapturePayload::captureSigningBody(WITH_NUL, sizeof(WITH_NUL)));
+    TEST_ASSERT_TRUE(CapturePayload::classifySigningBody(421, A, sizeof(A)) !=
+                     CapturePayload::classifySigningBody(422, A, sizeof(A)));
+}
+
 void runCapturePayloadTests() {
     RUN_TEST(content_type_matches_the_boundary);
     RUN_TEST(image_only_body_is_a_wellformed_single_file_multipart);
@@ -106,4 +141,7 @@ void runCapturePayloadTests() {
     RUN_TEST(classify_body_carries_event_id_then_image);
     RUN_TEST(empty_image_still_builds_valid_structure);
     RUN_TEST(associate_payload_matches_the_backend_contract);
+    RUN_TEST(classify_signing_body_mirrors_the_backend_canonical);
+    RUN_TEST(capture_signing_body_mirrors_the_backend_canonical);
+    RUN_TEST(signing_body_is_image_bound_and_binary_safe);
 }

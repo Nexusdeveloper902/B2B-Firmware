@@ -20,20 +20,27 @@ works identically, whether Postman, curl, a test, or this firmware.
   re-points the client, so a DHCP-rotated backend is picked up with no
   reboot or reflash; the failed POST itself is never retried (taps are
   not idempotent).
-- **Auth**: `Authorization: Bearer <READER_API_KEY>`. The key IS the
-  reader identity; the backend never trusts a client-supplied reader id.
-  The key is printed by the B2B-Core DemoSeeder (`./run setup`).
-  TASK-007: the firmware builds this header **explicitly** — the literal
-  `Bearer ` prefix comes from `Presence::bearerAuthorizationValue()`
-  (PresenceCore, pinned by `test_auth.cpp`), and `EspApiClient` sends it
-  via `addHeader`. Never switch back to `HTTPClient::setAuthorization(key)`:
-  that method prefixes its **default authorization type `Basic`**, the
-  backend ignores `Authorization: Basic <key>` entirely, and every
-  real-hardware call answered 401 with a perfectly valid key before this
-  fix (curl verification never caught it — curl sends the header
-  verbatim).
-- **Content-Type**: `application/json` (the classify endpoint alone uses
-  multipart — not used by this firmware; see "Out of scope").
+- **Auth**: `Authorization: Pulse-HMAC <kid>:<nonce>:<sig>` (ADR-016).
+  Every POST is signed with `READER_API_KEY` and a fresh `esp_random`
+  nonce (HMAC-SHA256 over method, path, nonce and body hash; image posts
+  sign the multipart canonical `event_id + image.sha256`, not the raw
+  bytes — PHP never sees raw multipart) — the key
+  itself NEVER rides the wire, so a hotspot capture holds one single-use
+  signature: replays 401, retargeted bodies fail. The backend never
+  trusts a client-supplied reader id. The key is printed by the B2B-Core
+  DemoSeeder (`./run setup`).
+  The firmware builds this header **explicitly** — the literal scheme
+  comes from `Presence::Signer::authorizationValue()` (PresenceCore,
+  pinned by `test_request_signer.cpp` against B2B-Core's golden vector),
+  and `EspApiClient` sends it via `addHeader`. Never switch back to
+  `HTTPClient::setAuthorization(key)`: that method prefixes its
+  **default authorization type `Basic`**, the backend ignores
+  `Authorization: Basic <key>` entirely (TASK-007 history), and the
+  legacy `Bearer <key>` bench path must never return to devices.
+- **Content-Type**: `application/json` for JSON posts; the camera station
+  posts images as `multipart/form-data` via `EspApiClient::postMultipart`
+  (signed over the multipart canonical — see above; wire bytes in
+  `CapturePayload`, canonical pinned by `test_capture_payload.cpp`).
 - **Localization**: error `message` text is localized by the backend via
   `Accept-Language`. The firmware therefore NEVER branches on message
   text — it decides on the HTTP status code and the `status` field, and
@@ -71,7 +78,7 @@ default; switch modes with the serial-console password — TASK-003).
 | HTTP | Backend meaning | Parsed outcome | Firmware feedback |
 |---|---|---|---|
 | 200 | `{ "status": "ok", "event_id": 1042, "event_type": "CLASS_ATTENDANCE", "student_first_name": "Maria", "next_step": null }` | `TapOutcome::Success` | EVENT LED solid 1.5 s (+ serial log with student + type; `next_step == "awaiting_classification"` is logged, nothing more — classification is out of scope for the reader (the ESP32-CAM station auto-captures+classifies on it — see CAMERA_STATION.md) |
-| 401 | missing/invalid Bearer key → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 fast blinks |
+| 401 | bad signature / unknown kid / replayed nonce → `{ "status": "error", "message": "..." }` | `TapOutcome::AuthFailure` | 6 fast blinks |
 | 404 | unknown card (`Card not recognized`) or inactive card (`Card is not active`) | `TapOutcome::CardNotRecognized` | 2 blinks; message logged |
 | 422 | validation error | `TapOutcome::ValidationError` | long solid (server-error style) |
 | 5xx | unexpected server error | `TapOutcome::ServerError` | long solid |
@@ -118,7 +125,7 @@ firmware needs no changes. Full byte-level spec:
 | HTTP | Backend meaning | Parsed outcome | Firmware feedback |
 |---|---|---|---|
 | 200 | `{ "status": "ok", "paired_student_name": "Maria González", "student_id": 3 }` | `PairOutcome::Success` | EVENT LED solid 1.5 s; serial log names the student |
-| 401 | missing/invalid Bearer key | `PairOutcome::AuthFailure` | 6 fast blinks |
+| 401 | bad signature / unknown kid / replayed nonce | `PairOutcome::AuthFailure` | 6 fast blinks |
 | 409 | no active pairing session → `{ "status": "error", "message": "No pairing session active" }` | `PairOutcome::NoActiveSession` | 3 blinks; message logged |
 | 422 | card already paired (or malformed uid) → `{ "status": "error", "message": "Card already paired" }` | `PairOutcome::AlreadyPaired` | 4 blinks; message logged |
 | 5xx / other | unexpected | `ServerError` / `UnknownError` | long solid |

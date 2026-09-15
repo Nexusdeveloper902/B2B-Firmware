@@ -11,6 +11,11 @@
  *
  * std::string is binary-safe for the JPEG bytes; HTTPClient's byte-array
  * POST sends them verbatim.
+ *
+ * Signing note (Pulse-HMAC multipart canonical): PHP never sees raw
+ * multipart bytes (php://input is empty), so image posts are signed over
+ * signingBody(), NOT the wire bytes — event_id + sha256(image), mirrored
+ * byte-for-byte by B2B-Core DeviceRequestSigner::multipartCanonical().
  */
 #pragma once
 
@@ -33,6 +38,12 @@ public:
 
     /** multipart body with event_id + image (card-first classify). */
     static std::string classifyWithEvent(long eventId, const uint8_t* jpeg, size_t length);
+
+    /** Pulse-HMAC signing canonical for classify: "event_id=<id>\nimage.sha256=<hex>". */
+    static std::string classifySigningBody(long eventId, const uint8_t* jpeg, size_t length);
+
+    /** Pulse-HMAC signing canonical for capture: "image.sha256=<hex>". */
+    static std::string captureSigningBody(const uint8_t* jpeg, size_t length);
 
 private:
     static std::string wrap(const std::string& fields, const uint8_t* jpeg, size_t length);

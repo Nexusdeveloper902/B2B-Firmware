@@ -25,28 +25,40 @@
 
 #include "config.h"
 
-// Real credentials live ONLY in the gitignored include/secrets.h.
-// A fresh checkout (no secrets.h yet) still compiles — against the
-// placeholder values of secrets.h.example — so `pio run` works before
-// the developer copies the template. The device will then fail Wi-Fi/
-// HTTP gracefully (bounded, NetworkError feedback) until real values
-// are provided. / Las credenciales reales viven SOLO en el gitignored
-// include/secrets.h. Un checkout nuevo aún compila — con los valores de
-// marcador de secrets.h.example — hasta que se copien valores reales.
+// Real credentials live ONLY in the gitignored secrets files — one per device
+// identity: `secrets.h` (DevKit reader) vs `secrets.cam_reader.h`
+// (ESP32-CAM reader, env `esp32cam-reader`). A fresh checkout (no secrets
+// file yet) still compiles — against the placeholder values of the matching
+// `.example` template — so `pio run` works before the developer copies the
+// template. The device will then fail Wi-Fi/HTTP gracefully (bounded,
+// NetworkError feedback) until real values are provided. / Las credenciales
+// reales viven SOLO en los secrets gitignorados — uno por identidad.
+#if defined(READER_ON_CAM_BOARD)
+#if __has_include("secrets.cam_reader.h")
+#include "secrets.cam_reader.h"
+#else
+#warning "include/secrets.cam_reader.h not found — building with example placeholder values (cp include/secrets.cam_reader.h.example include/secrets.cam_reader.h). / No se encontró include/secrets.cam_reader.h — se compila con valores de ejemplo."
+#include "secrets.cam_reader.h.example"
+#endif
+#else
 #if __has_include("secrets.h")
 #include "secrets.h"
 #else
 #warning "include/secrets.h not found — building with example placeholder values (cp include/secrets.h.example include/secrets.h). / No se encontró include/secrets.h — se compila con valores de ejemplo."
 #include "secrets.h.example"
 #endif
+#endif
 
-// TASK-003: a secrets.h written before the mode-console era has no
+// TASK-003: a secrets file written before the mode-console era has no
 // MODE_PASSWORD — keep it compiling (insecure default + bilingual
 // #warning) instead of breaking the user's local file after a pull.
-// / TASK-003: un secrets.h anterior a la consola de modo no tiene
-// MODE_PASSWORD — sigue compilando (valor inseguro + #warning bilingüe).
+// / Un secrets anterior a la consola de modo no tiene MODE_PASSWORD.
 #ifndef MODE_PASSWORD
+#if defined(READER_ON_CAM_BOARD)
+#warning "MODE_PASSWORD not defined — using insecure default; add it to include/secrets.cam_reader.h. / MODE_PASSWORD no definido — valor por defecto inseguro; añádelo a include/secrets.cam_reader.h."
+#else
 #warning "MODE_PASSWORD not defined — using insecure default; add it to include/secrets.h. / MODE_PASSWORD no definido — valor por defecto inseguro; añádelo a include/secrets.h."
+#endif
 #define MODE_PASSWORD "CHANGE-ME-MODE-PW"
 #endif
 
@@ -100,7 +112,7 @@ static LedFeedbackController feedback(PIN_LED_MODE, PIN_LED_EVENT, PIN_BUZZER);
 static CardDebouncer debouncer(CARD_COOLDOWN_MS);
 
 // TASK-003: the serial console that gates mode switching. Password value
-// from secrets.h; knobs (max wrong attempts, lockout) from config.h.
+// from the env's secrets file; knobs (max wrong attempts, lockout) from config.h.
 static ModeConsole modeConsole(MODE_PASSWORD,
                                 MODE_CONSOLE_MAX_WRONG_ATTEMPTS,
                                 MODE_CONSOLE_LOCKOUT_MS);
@@ -141,7 +153,11 @@ static void printBanner() {
     Serial.print("Backend: ");
     Serial.println(api.baseUrl().c_str());  // effective URL: discovered, or the compiled fallback
     Serial.println("---- type the MODE PASSWORD + Enter to switch modes / escribe la");
+#if defined(READER_ON_CAM_BOARD)
+    Serial.println("     CLAVE DE MODO + Enter para cambiar de modo (secrets.cam_reader.h) ----");
+#else
     Serial.println("     CLAVE DE MODO + Enter para cambiar de modo (secrets.h) ----");
+#endif
 #if defined(PRESENCE_READER_IMPL_RC522)
     Serial.println("---- present a card to the reader / presenta una tarjeta al lector ----");
 #elif defined(PRESENCE_READER_IMPL_MOCK)

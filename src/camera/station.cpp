@@ -472,6 +472,23 @@ HttpResponse Station::post(const std::string& path, const std::string& body,
     return response;
 }
 
+HttpResponse Station::postMultipart(const std::string& path, const std::string& body,
+                                    const std::string& contentType,
+                                    const std::string& signingBody) {
+    HttpResponse response = api_.postMultipart(path, body, contentType, signingBody);
+    if (!response.transportOk) {
+        PulseEndpoint endpoint;
+        if (discovery_.refreshIfDue(millis(), PULSE_REDISCOVER_COOLDOWN_MS,
+                                    endpoint) &&
+            endpoint.valid) {
+            api_.setBaseUrl(endpoint.baseUrl());
+            Serial.print("[DISC] backend re-discovered / backend redescubierto: ");
+            Serial.println(endpoint.baseUrl().c_str());
+        }
+    }
+    return response;
+}
+
 void Station::doCaptureAndUpload() {
     if (!captureHighResolution()) {
         return;  // capture failure IS the clear failure state (spec §8)
@@ -494,7 +511,12 @@ void Station::doCaptureAndUpload() {
             Serial.printf("[ES] Clasificación tarjeta-primero para el evento %ld...\n", armedEventId_);
             std::string body = CapturePayload::classifyWithEvent(
                 armedEventId_, latestCapture_, latestCaptureSize_);
-            HttpResponse r = post("/api/v1/recycling/classify", body, CapturePayload::contentType());
+            // Multipart canonical signing: PHP reconstructs the same string
+            // from the parsed upload (raw multipart never reaches it).
+            std::string signing = CapturePayload::classifySigningBody(
+                armedEventId_, latestCapture_, latestCaptureSize_);
+            HttpResponse r = postMultipart("/api/v1/recycling/classify", body,
+                                           CapturePayload::contentType(), signing);
             reportUpload("classify", r.status, String(r.body.c_str()), r.transportOk);
             if (r.transportOk && r.status == 200) {
                 armedEventId_ = -1;  // one-shot on SUCCESS only: never re-classify a stale event by accident
@@ -516,7 +538,9 @@ void Station::doCaptureAndUpload() {
     Serial.println("[EN] Bottle-first capture: uploading image (no card yet)...");
     Serial.println("[ES] Captura botella-primero: subiendo imagen (sin tarjeta aún)...");
     std::string body = CapturePayload::imageOnly(latestCapture_, latestCaptureSize_);
-    HttpResponse r = post("/api/v1/recycling/capture", body, CapturePayload::contentType());
+    std::string signing = CapturePayload::captureSigningBody(latestCapture_, latestCaptureSize_);
+    HttpResponse r = postMultipart("/api/v1/recycling/capture", body,
+                                   CapturePayload::contentType(), signing);
     reportUpload("capture", r.status, String(r.body.c_str()), r.transportOk);
 
     if (!r.transportOk || r.status != 200) {
