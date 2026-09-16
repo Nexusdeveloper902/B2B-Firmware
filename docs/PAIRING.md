@@ -304,22 +304,38 @@ first line only):
 
 A phone running the Pulse HCE app (`B2B-App/pulse-credential`) pairs
 and taps through this exact flow — arm, PAIRING mode, tap within the
-window — with two device-side differences, both automatic:
+window — plus **one step on the phone**, because pairing is also where
+the phone hands over its own key (TASK-015, ADR-018):
 
-1. Hold the phone steady 1–2 s on the antenna (ISO-DEP activation +
-   two APDUs take longer than a MIFARE UID read).
-2. The serial shows the HCE lines (`ISO-DEP target … ignored as
-   identity` → `HCE credential authenticated: <credId>`) instead of a
-   hex UID, and the pair call carries `"credential_kind": "hce"`
-   (stored as `cards.kind`; the desk badges it “Phone”).
+1. On the phone, tap **"Link this phone"** → **Start** (the card shows
+   `LINKING` and a 60 s countdown). This creates a NEW key in the phone's
+   Keystore and opens a single-use hand-off window.
+2. Arm the student on the desk, reader in PAIRING mode, then hold the
+   phone steady 1–2 s on the antenna (ISO-DEP activation + three APDUs).
+3. The serial shows `ISO-DEP target … ignored as identity` →
+   `HCE credential read (proof relayed to backend): <credId>` →
+   `HCE key received and wrapped for pairing (never logged)`, and the
+   pair call carries `"credential_kind": "hce"` plus the proof and the
+   wrapped key. The phone shows `KEY SENT`; the desk badges the card
+   “Phone”.
 
 Everything else — 409 with no session, 422 never-reassign, one-shot
 consumption, immediate tap-after-pair — is identical, because the
 phone's application-level credential id IS the `credential_uid`.
-`HCE authentication FAILED` means the phone and the reader disagree on
-`HCE_SECRET` (compare with `B2B-App/pulse-credential`). The phone's RF
-UID is never identity (Android randomizes it per tap). Full byte-level
-spec: [HCE_PROTOCOL.md](HCE_PROTOCOL.md).
+Phone-specific outcomes:
+
+| Serial | Meaning → fix |
+|---|---|
+| `HCE ENROLL refused …` | The phone's link window is not open (or already used) → tap "Link this phone" again, then re-tap |
+| `HCE phone has NO key yet (6A88)` (operation mode) | Phone never linked, or reinstalled → link it (steps 1–3) |
+| `[403] Phone credential could not be verified` (pairing) | The handed-over key did not verify the phone's proof → re-open the link window and re-tap; the session stays armed |
+| `[403]` on a tap (shown as a `[404]`-style rejection) | Wrong/old key, replay, or the phone was never re-linked after a reinstall |
+| `[OK] … paired` for a phone that was already paired | Same student → the phone was **re-keyed** (reinstall recovery); its history is kept |
+
+There is no HCE secret to configure on the reader any more. The phone's
+RF UID is never identity (Android randomizes it per tap). Lost phone:
+**Revoke** it on the pairing desk (kills its key). Full byte-level spec:
+[HCE_PROTOCOL.md](HCE_PROTOCOL.md).
 
 ## What every outcome means
 

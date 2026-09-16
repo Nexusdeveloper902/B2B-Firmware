@@ -1,4 +1,4 @@
-# Protocolo de credencial HCE de Pulse (v1)
+# Protocolo de credencial HCE de Pulse (v1.1 — llaves por credencial)
 
 > Also available in: [English](HCE_PROTOCOL.md)
 > Referencia canónica a nivel de bytes para la ruta teléfono-como-credencial.
@@ -11,7 +11,18 @@
 > (kind de credencial, endpoints Pulse, UI del escritorio).
 
 Teléfono-como-credencial sobre NFC para ESP32 + RC522. Deliberadamente
-mínimo: dos APDUs.
+mínimo: dos APDUs por toque, más un tercero (ENROLL) una sola vez al
+emparejar.
+
+> **v1.1 (TASK-015, ADR-018; B2B-Core ADR-068; B2B-App ADR-004).** Los
+> bytes de SELECT y CHALLENGE **no cambian**. Lo que cambió es la llave:
+> **ya no existe un `HCE_SECRET` compartido** en ningún lado. Cada
+> credencial de teléfono tiene su propia llave de 256 bits, guardada en el
+> Android Keystore de ese teléfono; B2B-Core guarda la única otra copia,
+> cifrada en reposo. El **lector no tiene llave HCE ni verifica nada**:
+> retransmite su nonce y el MAC del teléfono, y **B2B-Core verifica** con
+> la llave de esa credencial. Los cambios aditivos son el APDU `ENROLL`
+> (solo al emparejar) y el status word `6A88` (teléfono sin llave).
 
 ```text
 NFC-A
@@ -21,7 +32,9 @@ ISO-DEP (ISO/IEC 14443-4)
 APDU
   ↓  SELECT AID -> CHALLENGE -> verificación
 Protocolo de credencial Pulse (identidad a nivel de aplicación)
-  ↓  credential_uid + credential_kind=hce → B2B-Core
+  ↓  credential_uid + hce_nonce + hce_mac (+ llave envuelta al emparejar) → B2B-Core
+B2B-Core
+  ↓  ¿HMAC-SHA256(K_cred, credId || nonce) == hce_mac? (tiempo constante, nonce de un solo uso)
 ```
 
 Nada de MIFARE Classic en esta ruta: Android HCE no puede emularlo, así
@@ -87,22 +100,88 @@ Respuesta:
 
 ```text
 credLen (1) | credId (1-32, ASCII) | HMAC-SHA256 (32) | 90 00
-MAC = HMAC-SHA256(key = HCE_SECRET, msg = credId || nonce)
+MAC = HMAC-SHA256(key = K_cred, msg = credId || nonce)
 ```
 
-El lector recomputa el MAC sobre el id recibido más el nonce enviado y
-compara en tiempo constante. Los secretos jamás se registran (solo el
-nonce por toque y el id público); un mismatch falla cerrado.
+`K_cred` es **la llave propia de esta credencial** (32 bytes, Android
+Keystore en el teléfono). Un teléfono sin llave utilizable responde
+**`6A88`** en vez de un MAC (aún no vinculado, o una reinstalación borró
+el Keystore).
+
+El lector **no** verifica el MAC — no tiene llave. Envía a B2B-Core el id
+de credencial, su propio nonce (`hce_nonce`, 16 hex) y el MAC del
+teléfono (`hce_mac`, 64 hex); el backend recomputa el MAC con la llave
+guardada de esa credencial, compara en tiempo constante y acepta cada
+nonce una sola vez por credencial. Nonce y MAC pueden registrarse; el
+material de llave jamás. Todo mismatch falla cerrado en el backend (`403`).
+
+## APDU 3 — ENROLL (solo al emparejar, entrega única de la llave)
+
+Lo envía un lector **solo en modo EMPAREJAR**, justo después de CHALLENGE
+en la misma sesión. Petición (5 bytes; también se acepta la cabecera de
+4 bytes sin `Le`; un campo de datos es `6700`):
+
+```text
+CLA | INS | P1 | P2 | Le
+ 80 | 20  | 00 | 00 | 20
+```
+
+Respuesta, solo mientras el titular abrió la **ventana de vinculación**
+del teléfono («Vincular este teléfono», 60 s), y **una sola vez** por
+ventana:
+
+```text
+K_cred (32) | 90 00          (34 bytes: cabe en un I-block del RC522)
+```
+
+Si no, `6985` (ventana cerrada, vencida, ya entregada o sin SELECT). Abrir
+la ventana **reemplaza** primero la llave en el Keystore, así que una
+copia leída por otro queda inútil en cuanto el titular reintenta.
+
+El lector nunca envía `K_cred` en claro por Wi-Fi. La envuelve con un
+nonce fresco de 16 bytes y su propia clave de API:
+
+```text
+hce_key_nonce   = 32 caracteres hex (esp_random, fresco por emparejamiento)
+pad             = HMAC-SHA256(READER_API_KEY,
+                    "pulse-hce-key-wrap/v1\n" || credId || "\n" || hce_key_nonce)
+hce_key_wrapped = hex(K_cred XOR pad)
+```
+
+La petición de emparejamiento además va firmada con Pulse-HMAC (ADR-016:
+atada al cuerpo, nonce de un solo uso). B2B-Core desenvuelve la llave,
+exige que la prueba CHALLENGE del mismo toque verifique con ella (prueba
+de posesión) y la guarda cifrada. La llave cruda se borra de la RAM del
+lector justo después de envolverla y jamás se registra (la ruta de
+reintento censura las tramas ENROLL).
+
+## Vector de prueba compartido (fijado en los tres repos)
+
+| Ítem | Valor |
+|---|---|
+| `K_cred` | `000102…1f` (bytes 0..31) |
+| `credId` | `PLS-K3Y7V3CT0R5Z` |
+| `nonce` | `0123456789abcdef` |
+| `MAC` | `ba6d0fbf5106f79257727819d19a17b7e15abc4b8a0d1bfe71cd76090488a295` |
+| Respuesta CHALLENGE | `10` `504c532d4b335937563343543052355a` `ba6d…a295` `9000` |
+| `READER_API_KEY` | `test-secret-000000000000000001` |
+| `hce_key_nonce` | `000102030405060708090a0b0c0d0e0f` |
+| `hce_key_wrapped` | `c5bb9fe15dff66a8636366dd4e73e0a3146601e3b3c36472961de142a9a914c2` |
+
+Calculado fuera de las tres implementaciones (`hmac` de Python); fijado
+en `test/test_hce_protocol.cpp` aquí, `HceCredentialAuthTest` en
+B2B-Core y `ApduProtocolTest` en B2B-App. Cada suite fija además
+vectores HMAC conocidos del RFC 4231.
 
 ## Integración Pulse (lo que el prototipo no tenía)
 
 | Paso | Comportamiento |
 |---|---|
-| Lector → backend (emparejar) | `POST /api/v1/admin/cards/pair` con `{"credential_uid": "<credId>", "credential_kind": "hce"}` — mismo flujo arma-then-pair, misma semántica 409/422 que las tarjetas físicas |
-| Lector → backend (tap) | `POST /api/v1/events/tap` con `{"credential_uid": "<credId>"}` — el kind NO se envía a propósito (la búsqueda es solo por uid); los toques de teléfono resuelven `credencial → estudiante → asistencia / PAE / reciclaje` por la espina sin cambios |
-| Almacenamiento | `cards.kind` (`physical` \| `hce`, por defecto `physical`) — metadato de visualización/auditoría; el firmware viejo que omite el kind empareja igual que antes |
+| Lector → backend (emparejar) | `POST /api/v1/admin/cards/pair` con `{"credential_uid", "credential_kind": "hce", "hce_nonce", "hce_mac", "hce_key_nonce", "hce_key_wrapped"}` — mismo flujo arma-then-pair y semántica 409/422 que las tarjetas físicas; `403` = la prueba no verificó con la llave entregada; un teléfono activo del **mismo** estudiante armado recibe llave nueva (`"rekeyed": true`) |
+| Lector → backend (tap) | `POST /api/v1/events/tap` con `{"credential_uid", "hce_nonce", "hce_mac"}` — el kind NO se envía (vive en el servidor); una tarjeta de teléfono sin prueba válida y fresca responde `403 hce_auth_failed`. Mismos campos en `/recycling/captures/{id}/associate` |
+| Almacenamiento | `cards.kind` (`physical` \| `hce`) + `hce_credential_keys` (una llave cifrada por tarjeta de teléfono); la revocación (`POST /admin/cards/{id}/revoke`) destruye la llave |
 | UI del escritorio | Credenciales de teléfono marcadas (“Phone” / “Teléfono”) en chips del roster, historial reciente (filas SSR + en vivo por WS) y escritorio de estudiantes |
-| Provisionamiento de clave | `HCE_SECRET` en `secrets.h` / `secrets.camera.h` gitignorados (las plantillas lo documentan); DEBE coincidir con el secreto de la app Android o todo toque de teléfono falla cerrado. Un secrets anterior a HCE compila con el valor de desarrollo + `#warning` (mismo precedente que `MODE_PASSWORD`) |
+| Provisionamiento de clave | Por credencial, al emparejar: el titular abre «Vincular este teléfono», el lector (modo EMPAREJAR) envía ENROLL y envuelve la llave con `READER_API_KEY`. **No existe llave HCE en ningún secrets, flag de compilación ni código.** Un secrets viejo que aún defina `HCE_SECRET` se ignora |
 
 ## Status words
 
@@ -110,8 +189,9 @@ nonce por toque y el id público); un mismatch falla cerrado.
 |---|---|---|
 | `9000` | Éxito | SELECT coincidente / CHALLENGE respondido |
 | `6A82` | App no encontrada | SELECT con otro AID |
-| `6985` | Condiciones no satisfechas | CHALLENGE antes de SELECT |
-| `6700` | Longitud errónea | `Lc` ≠ 7 (SELECT) / ≠ 8 (CHALLENGE), APDU truncado |
+| `6985` | Condiciones no satisfechas | CHALLENGE/ENROLL antes de SELECT; ENROLL sin ventana de vinculación abierta |
+| `6A88` | Dato referenciado no encontrado | CHALLENGE en un teléfono sin llave utilizable (no vinculado / reinstalado) |
+| `6700` | Longitud errónea | `Lc` ≠ 7 (SELECT) / ≠ 8 (CHALLENGE), ENROLL con datos, APDU truncado |
 | `6D00` | INS desconocido | CLA conocido, instrucción desconocida |
 | `6E00` | CLA desconocido | Primer byte no `00`/`80` |
 
@@ -122,7 +202,8 @@ nonce por toque y el id público); un mismatch falla cerrado.
 | Petición SELECT | 13 bytes (con Le opcional) |
 | Respuesta SELECT | 8 bytes |
 | Petición CHALLENGE | 14 bytes (con Le opcional) |
-| Respuesta CHALLENGE | hasta 67 bytes (1 + 32 + 32 + 2; el prototipo usa 51) |
+| Respuesta CHALLENGE | hasta 67 bytes (1 + 32 + 32 + 2; los ids `PLS-` usan 51) |
+| Petición / respuesta ENROLL | 5 bytes / 34 bytes |
 | INF de un I-block | ~57 B — la respuesta de 51 bytes del prototipo cabe; un id de 32 bytes necesita los ACKs de encadenado del lector (ya implementados en `TCL_Transceive`) |
 
 ## Condiciones de error (diagnóstico del lector)
@@ -145,9 +226,12 @@ obligatorio y sobra para intercambios <70 B.
 
 `HCE SELECT failed` (sin
 respuesta I-block) · `HCE SELECT rejected (unknown AID)` (`6A82`) ·
-`HCE CHALLENGE timeout` · `HCE authentication FAILED (malformed or HMAC
-mismatch)`. Cada fallo libera el objetivo (`TCL_Deselect` + `PICC_HaltA`)
-y el equipo sigue respondiendo; los toques MIFARE jamás se afectan (esa
+`HCE CHALLENGE timeout` · `HCE phone has NO key yet (6A88)` · `HCE
+CHALLENGE answer malformed` · `HCE ENROLL refused` (emparejando: la
+ventana del teléfono no está abierta). Una llave errónea ya no es un error
+del lector: el toque llega al backend y responde `403` (rechazo tipo
+`[404]` en el serial). Cada fallo libera el objetivo (`TCL_Deselect` +
+`PICC_HaltA`) y el equipo sigue respondiendo; los toques MIFARE jamás se afectan (esa
 ruta no corre para objetivos ISO-DEP, y viceversa).
 
 ## Evidencia de independencia del UID
@@ -159,14 +243,41 @@ ruta no corre para objetivos ISO-DEP, y viceversa).
    no existe columna `rf_uid`; un id no-hex (imposible como UID RF) se
    empareja y toca de punta a punta, dos veces, al mismo estudiante.
 3. **Banco** (checklist §10): registra la longitud del UID RF entre
-   toques (cambia), verifica que el mismo id autentica siempre.
+   toques (cambia), verifica que el mismo id se acepta siempre.
 
-## Endurecimiento productivo (explícitamente fuera de alcance)
+## Límites de seguridad (qué garantiza v1.1 y qué no)
 
-Clave precompartida única de desarrollo → claves por credencial desde un
-backend seguro; añadir protección anti-replay (desafíos rastreados /
-contador monotónico); autenticación mutua + canal cifrado (p. ej.
-estilo SCP03); rotación de claves; revisión de canal lateral. La clave
-Bearer del lector avala la credencial verificada ante el backend — la
-misma confianza que un UID físico. Esta especificación prueba la ruta
-NFC y la integración Pulse, no un sistema credencial.
+**Garantizado ahora**
+- Sin secreto HCE compartido: extraer un APK, un lector o un secrets no
+  da ninguna llave que sirva para otra credencial.
+- La llave de un teléfono solo autentica su propio id (el id va dentro
+  del MAC y el backend busca la llave por ese id).
+- Los lectores no pueden falsificar toques de teléfono: una firma de
+  lector válida sin prueba válida y fresca del teléfono se rechaza (`403`).
+- Las transcripciones repetidas se rechazan (memoria de nonces por
+  credencial, 7 días).
+- La revocación (teléfono perdido/robado) destruye la llave del backend;
+  la llave del teléfono queda inútil aunque se reactive el estado a mano.
+- El provisionamiento no puede sobrescribir la credencial de otro
+  estudiante: solo recibe llave nueva un teléfono activo del estudiante
+  que el admin armó.
+
+**Sigue siendo cierto (límites documentados, no resueltos aquí)**
+- Autenticación unilateral con nonce elegido por el lector: quien tenga
+  una clave de lector y lea un teléfono a escondidas puede presentar esa
+  transcripción una vez (pre-play) antes del siguiente toque legítimo. El
+  backend la rechaza tras el primer uso.
+- La llave cruza NFC en claro **una vez**, durante la ventana de
+  vinculación abierta por el titular en la mesa (entrega única). Un
+  espía en ese instante exacto podría copiarla. Mitigación: ventana corta
+  y de un solo uso; volver a vincular rota la llave.
+- El backend es la raíz de confianza: su base de datos más `APP_KEY`
+  exponen todas las llaves (esquema simétrico). Una credencial asimétrica
+  (ECDSA) lo eliminaría, a costa de un CHALLENGE nuevo que no cabe en un
+  I-block del RC522.
+- El teléfono responde bloqueado (política: `requireDeviceUnlock=false`,
+  llave sin autenticación de usuario). Un teléfono robado toca hasta que
+  se revoque.
+- Los UID MIFARE físicos siguen sin criptografía (clonables).
+- Autenticación mutua, canal NFC cifrado y revisión de canal lateral
+  siguen fuera de alcance.

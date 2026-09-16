@@ -21,13 +21,15 @@ const char* PairingMode::hint() const {
            "     luego acerca una tarjeta NUEVA";
 }
 
-ApiCall OperationMode::onCardTap(const std::string& credentialUid, const std::string&) {
+ApiCall OperationMode::onCardTap(const std::string& credentialUid, const std::string&,
+                                 const HceProof& proof) {
     // credentialKind intentionally ignored: the tap lookup is
     // credential_uid-only (the HCE phone's RF UID is never identity).
+    // TASK-015: the phone's relayed proof rides along — B2B-Core checks it.
     ApiCall call;
     call.type = ApiCallType::Tap;
     call.path = "/api/v1/events/tap";
-    call.jsonBody = buildTapPayload(credentialUid);
+    call.jsonBody = buildTapPayload(credentialUid, "", proof);
     return call;
 }
 
@@ -59,11 +61,12 @@ FeedbackSignal OperationMode::interpret(const TapResult& result) const {
 }
 
 ApiCall PairingMode::onCardTap(const std::string& credentialUid,
-                               const std::string& credentialKind) {
+                               const std::string& credentialKind,
+                               const HceProof& proof) {
     ApiCall call;
     call.type = ApiCallType::PairCard;
     call.path = "/api/v1/admin/cards/pair";
-    call.jsonBody = buildPairPayload(credentialUid, credentialKind);
+    call.jsonBody = buildPairPayload(credentialUid, credentialKind, proof);
     return call;
 }
 
@@ -80,6 +83,7 @@ FeedbackSignal PairingMode::interpret(const PairResult& result) const {
             signal.kind = FeedbackKind::PairNoSession;
             return signal;
         case PairOutcome::AlreadyPaired:
+        case PairOutcome::ProofRejected:  // TASK-015: same "rejected, window still armed" signal
             signal.kind = FeedbackKind::PairAlreadyPaired;
             return signal;
         case PairOutcome::AuthFailure:

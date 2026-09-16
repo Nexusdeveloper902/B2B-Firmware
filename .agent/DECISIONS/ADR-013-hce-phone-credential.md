@@ -1,6 +1,8 @@
 # ADR-013: HCE phone support inside the existing reader (no parallel stack)
 
 ## Status
+**Key model superseded by ADR-018 (2026-09-16):** no shared `HCE_SECRET`; the reader relays the proof and B2B-Core verifies with per-credential keys. The rest of this ADR (ISO-DEP branch, kind, UID-independence) stands.
+
 Accepted (2026-09-14, TASK-011)
 
 ## Context

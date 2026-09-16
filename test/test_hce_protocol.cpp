@@ -4,29 +4,8 @@
 #include <string>
 
 #include "HceProtocol.h"
+#include "RequestSigner.h"
 
-namespace {
-
-// --- helpers ---------------------------------------------------------------
-
-// Builds a well-formed CHALLENGE response for cred + nonce under key.
-void makeChallengeResponse(const std::string& cred, const uint8_t nonce[8],
-                           const uint8_t* key, size_t keyLen,
-                           uint8_t* out, size_t* outLen) {
-    uint8_t msg[64];
-    memcpy(msg, cred.data(), cred.size());
-    memcpy(msg + cred.size(), nonce, 8);
-    uint8_t mac[32];
-    Presence::Hce::hmacSha256(key, keyLen, msg, cred.size() + 8, mac);
-    out[0] = static_cast<uint8_t>(cred.size());
-    memcpy(out + 1, cred.data(), cred.size());
-    memcpy(out + 1 + cred.size(), mac, 32);
-    out[1 + cred.size() + 32] = 0x90;
-    out[1 + cred.size() + 32 + 1] = 0x00;
-    *outLen = 1 + cred.size() + 32 + 2;
-}
-
-}  // namespace
 
 // --- SELECT builder: byte-exact vs the prototype ----------------------------
 
@@ -87,21 +66,50 @@ void test_hce_select_parser_rejects_malformed(void) {
                           static_cast<int>(Presence::Hce::parseSelectResponse(nullptr, 0)));
 }
 
+// --- Shared per-credential vector (TASK-015, ADR-018) ------------------------
+// Literal values computed OUTSIDE this code (Python hmac) and pinned
+// identically in B2B-Core (HceCredentialAuthTest) and B2B-App
+// (ApduProtocolTest), so the phone, the relay and the verifier cannot drift.
+//   K = 00 01 .. 1f, credId = "PLS-K3Y7V3CT0R5Z", nonce = 01 23 45 67 89 ab cd ef
+static const char kVectorCred[] = "PLS-K3Y7V3CT0R5Z";
+static const uint8_t kVectorNonce[8] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
+static const uint8_t kVectorResponse[] = {
+    0x10, 'P', 'L', 'S', '-', 'K', '3', 'Y', '7', 'V', '3', 'C', 'T', '0', 'R', '5', 'Z',
+    0xba, 0x6d, 0x0f, 0xbf, 0x51, 0x06, 0xf7, 0x92, 0x57, 0x72, 0x78, 0x19, 0xd1, 0x9a, 0x17, 0xb7,
+    0xe1, 0x5a, 0xbc, 0x4b, 0x8a, 0x0d, 0x1b, 0xfe, 0x71, 0xcd, 0x76, 0x09, 0x04, 0x88, 0xa2, 0x95,
+    0x90, 0x00};
+
+static void vectorKey(uint8_t key[32]) {
+    for (int i = 0; i < 32; i++) {
+        key[i] = static_cast<uint8_t>(i);
+    }
+}
+
 // --- CHALLENGE parser ----------------------------------------------------------
 
-void test_hce_challenge_parser_round_trip(void) {
-    static const uint8_t kKey[] = "dev-only-prototype-secret-001";
-    const uint8_t nonce[8] = {0xAA, 0xBB, 0xCC, 0xDD, 0x11, 0x22, 0x33, 0x44};
-    uint8_t resp[64];
-    size_t respLen = 0;
-    makeChallengeResponse("TEST-ANDROID-001", nonce, kKey, sizeof(kKey) - 1, resp, &respLen);
-    TEST_ASSERT_EQUAL_size_t(51, respLen);  // 1 + 16 + 32 + 2, per the spec
-
+void test_hce_challenge_parser_extracts_the_relay_proof(void) {
     Presence::Hce::ChallengeResponse parsed;
-    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(resp, respLen, parsed));
+    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(kVectorResponse, sizeof(kVectorResponse), parsed));
     TEST_ASSERT_TRUE(parsed.ok);
-    TEST_ASSERT_EQUAL_STRING("TEST-ANDROID-001", parsed.credId.c_str());
-    TEST_ASSERT_TRUE(Presence::Hce::verifyChallengeResponse(parsed, nonce, kKey, sizeof(kKey) - 1));
+    TEST_ASSERT_EQUAL_size_t(51, sizeof(kVectorResponse));  // 1 + 16 + 32 + 2, per the spec
+    TEST_ASSERT_EQUAL_STRING(kVectorCred, parsed.credId.c_str());
+    // The relay proof is exactly what B2B-Core expects, hex-encoded.
+    TEST_ASSERT_EQUAL_STRING("0123456789abcdef", Presence::Signer::toHex(kVectorNonce, 8).c_str());
+    TEST_ASSERT_EQUAL_STRING("ba6d0fbf5106f79257727819d19a17b7e15abc4b8a0d1bfe71cd76090488a295",
+                             Presence::Signer::toHex(parsed.mac, 32).c_str());
+}
+
+void test_hce_shared_vector_mac_is_the_phone_answer(void) {
+    // Independent of the parser: the HMAC primitive under the vector key
+    // reproduces the literal MAC bytes the phone put on the wire.
+    uint8_t key[32];
+    vectorKey(key);
+    uint8_t msg[16 + 8];
+    memcpy(msg, kVectorCred, 16);
+    memcpy(msg + 16, kVectorNonce, 8);
+    uint8_t mac[32];
+    Presence::Hce::hmacSha256(key, 32, msg, sizeof(msg), mac);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(kVectorResponse + 17, mac, 32);
 }
 
 void test_hce_challenge_parser_rejects_malformed(void) {
@@ -116,14 +124,18 @@ void test_hce_challenge_parser_rejects_malformed(void) {
     const uint8_t truncated[] = {0x04, 'A', 'B', 'C', 'D', 0x01, 0x02, 0x90, 0x00};
     TEST_ASSERT_FALSE(Presence::Hce::parseChallengeResponse(truncated, sizeof(truncated), out));
     // Wrong status word.
-    uint8_t wrongSw[64];
-    size_t wrongSwLen = 0;
-    static const uint8_t kKey[] = "k";
-    const uint8_t nonce[8] = {0};
-    makeChallengeResponse("ABCD", nonce, kKey, sizeof(kKey) - 1, wrongSw, &wrongSwLen);
-    wrongSw[wrongSwLen - 2] = 0x6F;
-    wrongSw[wrongSwLen - 1] = 0x00;
-    TEST_ASSERT_FALSE(Presence::Hce::parseChallengeResponse(wrongSw, wrongSwLen, out));
+    uint8_t wrongSw[sizeof(kVectorResponse)];
+    memcpy(wrongSw, kVectorResponse, sizeof(wrongSw));
+    wrongSw[sizeof(wrongSw) - 2] = 0x6F;
+    TEST_ASSERT_FALSE(Presence::Hce::parseChallengeResponse(wrongSw, sizeof(wrongSw), out));
+    // One trailing byte too many / too few.
+    TEST_ASSERT_FALSE(Presence::Hce::parseChallengeResponse(kVectorResponse, sizeof(kVectorResponse) - 1, out));
+    // "No key" status word is not a credential.
+    const uint8_t noKey[] = {0x6A, 0x88};
+    TEST_ASSERT_FALSE(Presence::Hce::parseChallengeResponse(noKey, sizeof(noKey), out));
+    TEST_ASSERT_TRUE(Presence::Hce::isKeyMissing(noKey, sizeof(noKey)));
+    TEST_ASSERT_FALSE(Presence::Hce::isKeyMissing(kVectorResponse, sizeof(kVectorResponse)));
+    TEST_ASSERT_FALSE(Presence::Hce::isKeyMissing(nullptr, 0));
 }
 
 // --- HMAC-SHA256: known-answer + tamper ---------------------------------------
@@ -142,23 +154,82 @@ void test_hce_hmac_matches_rfc4231_vector(void) {
     TEST_ASSERT_EQUAL_UINT8_ARRAY(want, mac, sizeof(want));
 }
 
-void test_hce_verify_rejects_wrong_key_nonce_or_mac(void) {
-    static const uint8_t kKey[] = "dev-only-prototype-secret-001";
-    static const uint8_t kOther[] = "another-secret-00000000000002";
-    const uint8_t nonce[8] = {1, 2, 3, 4, 5, 6, 7, 8};
-    const uint8_t otherNonce[8] = {8, 7, 6, 5, 4, 3, 2, 1};
-    uint8_t resp[64];
-    size_t respLen = 0;
-    makeChallengeResponse("TEST-ANDROID-001", nonce, kKey, sizeof(kKey) - 1, resp, &respLen);
+void test_hce_wrong_key_nonce_or_credential_changes_the_mac(void) {
+    uint8_t key[32];
+    vectorKey(key);
+    uint8_t msg[24];
+    uint8_t mac[32];
 
-    Presence::Hce::ChallengeResponse parsed;
-    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(resp, respLen, parsed));
-    TEST_ASSERT_TRUE(Presence::Hce::verifyChallengeResponse(parsed, nonce, kKey, sizeof(kKey) - 1));
-    // Wrong key, wrong nonce, tampered MAC all fail closed.
-    TEST_ASSERT_FALSE(Presence::Hce::verifyChallengeResponse(parsed, nonce, kOther, sizeof(kOther) - 1));
-    TEST_ASSERT_FALSE(Presence::Hce::verifyChallengeResponse(parsed, otherNonce, kKey, sizeof(kKey) - 1));
-    parsed.mac[0] ^= 0x01;
-    TEST_ASSERT_FALSE(Presence::Hce::verifyChallengeResponse(parsed, nonce, kKey, sizeof(kKey) - 1));
+    key[0] ^= 0x01;  // wrong key
+    memcpy(msg, kVectorCred, 16);
+    memcpy(msg + 16, kVectorNonce, 8);
+    Presence::Hce::hmacSha256(key, 32, msg, 24, mac);
+    TEST_ASSERT_FALSE(memcmp(mac, kVectorResponse + 17, 32) == 0);
+    key[0] ^= 0x01;
+
+    msg[23] ^= 0x01;  // wrong nonce
+    Presence::Hce::hmacSha256(key, 32, msg, 24, mac);
+    TEST_ASSERT_FALSE(memcmp(mac, kVectorResponse + 17, 32) == 0);
+    msg[23] ^= 0x01;
+
+    msg[15] = 'Y';  // another credential id
+    Presence::Hce::hmacSha256(key, 32, msg, 24, mac);
+    TEST_ASSERT_FALSE(memcmp(mac, kVectorResponse + 17, 32) == 0);
+}
+
+// --- ENROLL (pairing-only key hand-off) -----------------------------------------
+
+void test_hce_enroll_builder_is_byte_exact(void) {
+    uint8_t out[8];
+    const uint8_t want[] = {0x80, 0x20, 0x00, 0x00, 0x20};
+    TEST_ASSERT_EQUAL_size_t(sizeof(want), Presence::Hce::buildEnroll(out, sizeof(out)));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(want, out, sizeof(want));
+    TEST_ASSERT_EQUAL_size_t(0, Presence::Hce::buildEnroll(out, 4));
+}
+
+void test_hce_enroll_parser_accepts_only_key_plus_9000(void) {
+    uint8_t resp[34];
+    vectorKey(resp);
+    resp[32] = 0x90;
+    resp[33] = 0x00;
+    uint8_t key[32];
+    memset(key, 0xEE, sizeof(key));
+    TEST_ASSERT_TRUE(Presence::Hce::parseEnrollResponse(resp, sizeof(resp), key));
+    uint8_t want[32];
+    vectorKey(want);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(want, key, 32);
+
+    // Window closed (6985), truncated, wrong SW, oversize: all refused.
+    const uint8_t closed[] = {0x69, 0x85};
+    TEST_ASSERT_FALSE(Presence::Hce::parseEnrollResponse(closed, sizeof(closed), key));
+    TEST_ASSERT_FALSE(Presence::Hce::parseEnrollResponse(resp, 33, key));
+    resp[33] = 0x01;
+    TEST_ASSERT_FALSE(Presence::Hce::parseEnrollResponse(resp, sizeof(resp), key));
+    uint8_t big[35] = {0};
+    big[33] = 0x90;
+    big[34] = 0x00;
+    TEST_ASSERT_FALSE(Presence::Hce::parseEnrollResponse(big, sizeof(big), key));
+    TEST_ASSERT_FALSE(Presence::Hce::parseEnrollResponse(nullptr, 34, key));
+}
+
+void test_hce_key_wrap_matches_the_shared_vector(void) {
+    // Same literal as B2B-Core HceCredentialAuthTest: reader key
+    // "test-secret-000000000000000001", key nonce 000102..0f.
+    uint8_t key[32];
+    vectorKey(key);
+    const std::string wrapped = Presence::Hce::wrapKeyHex(
+        "test-secret-000000000000000001", kVectorCred, "000102030405060708090a0b0c0d0e0f", key);
+    TEST_ASSERT_EQUAL_STRING("c5bb9fe15dff66a8636366dd4e73e0a3146601e3b3c36472961de142a9a914c2",
+                             wrapped.c_str());
+    // Bound to the reader key, the credential and the nonce.
+    TEST_ASSERT_TRUE(wrapped != Presence::Hce::wrapKeyHex("another-reader-key", kVectorCred,
+                                                          "000102030405060708090a0b0c0d0e0f", key));
+    TEST_ASSERT_TRUE(wrapped != Presence::Hce::wrapKeyHex("test-secret-000000000000000001", "PLS-000000000000",
+                                                          "000102030405060708090a0b0c0d0e0f", key));
+    TEST_ASSERT_TRUE(wrapped != Presence::Hce::wrapKeyHex("test-secret-000000000000000001", kVectorCred,
+                                                          "ffffffffffffffffffffffffffffffff", key));
+    // Never the key itself.
+    TEST_ASSERT_TRUE(wrapped != Presence::Signer::toHex(key, 32));
 }
 
 // --- UID-independence: the RF UID is not an input -------------------------------
@@ -168,12 +239,6 @@ void test_hce_verify_rejects_wrong_key_nonce_or_mac(void) {
 // never smuggle the UID into the identity path.
 
 void test_hce_identity_ignores_the_rf_uid(void) {
-    static const uint8_t kKey[] = "dev-only-prototype-secret-001";
-    const uint8_t nonce[8] = {9, 9, 9, 9, 9, 9, 9, 9};
-    uint8_t resp[64];
-    size_t respLen = 0;
-    makeChallengeResponse("TEST-ANDROID-001", nonce, kKey, sizeof(kKey) - 1, resp, &respLen);
-
     // Two taps, two different randomized RF UIDs — the APDU bytes are what
     // they are; the UID values below are never passed to any parser.
     const uint8_t rfUidTap1[] = {0x08, 0x11, 0x22, 0x33};
@@ -182,11 +247,11 @@ void test_hce_identity_ignores_the_rf_uid(void) {
     (void)rfUidTap2;
 
     Presence::Hce::ChallengeResponse first, second;
-    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(resp, respLen, first));
-    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(resp, respLen, second));
+    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(kVectorResponse, sizeof(kVectorResponse), first));
+    TEST_ASSERT_TRUE(Presence::Hce::parseChallengeResponse(kVectorResponse, sizeof(kVectorResponse), second));
     TEST_ASSERT_EQUAL_STRING(first.credId.c_str(), second.credId.c_str());
-    TEST_ASSERT_EQUAL_STRING("TEST-ANDROID-001", first.credId.c_str());
-    TEST_ASSERT_TRUE(Presence::Hce::verifyChallengeResponse(first, nonce, kKey, sizeof(kKey) - 1));
+    TEST_ASSERT_EQUAL_STRING(kVectorCred, first.credId.c_str());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(first.mac, second.mac, 32);
 }
 
 void runHceProtocolTests() {
@@ -196,9 +261,13 @@ void runHceProtocolTests() {
     RUN_TEST(test_hce_select_parser_accepts_hce_ok);
     RUN_TEST(test_hce_select_parser_reports_unknown_aid);
     RUN_TEST(test_hce_select_parser_rejects_malformed);
-    RUN_TEST(test_hce_challenge_parser_round_trip);
+    RUN_TEST(test_hce_challenge_parser_extracts_the_relay_proof);
+    RUN_TEST(test_hce_shared_vector_mac_is_the_phone_answer);
     RUN_TEST(test_hce_challenge_parser_rejects_malformed);
     RUN_TEST(test_hce_hmac_matches_rfc4231_vector);
-    RUN_TEST(test_hce_verify_rejects_wrong_key_nonce_or_mac);
+    RUN_TEST(test_hce_wrong_key_nonce_or_credential_changes_the_mac);
+    RUN_TEST(test_hce_enroll_builder_is_byte_exact);
+    RUN_TEST(test_hce_enroll_parser_accepts_only_key_plus_9000);
+    RUN_TEST(test_hce_key_wrap_matches_the_shared_vector);
     RUN_TEST(test_hce_identity_ignores_the_rf_uid);
 }

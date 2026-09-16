@@ -10,8 +10,11 @@
  * Two credential paths, one poll() (HCE integration):
  *   physical — a MIFARE Classic UID read off the RF layer (as before);
  *   hce      — an Android phone answering as an ISO-DEP target: SELECT
- *              AID F0010203040506 + random 8-byte CHALLENGE, verified as
- *              HMAC-SHA256(HCE_SECRET, credId || nonce). The phone's RF
+ *              AID F0010203040506 + random 8-byte CHALLENGE, whose
+ *              HMAC-SHA256(K_cred, credId || nonce) answer is RELAYED to
+ *              B2B-Core (lastProof()) — this reader holds no HCE key
+ *              (TASK-015, ADR-018). In pairing mode it also fetches the
+ *              phone's key once (ENROLL) and wraps it. The phone's RF
  *              UID is randomized per tap by Android: it is logged only as
  *              a length and NEVER used as identity — lastKind() reports
  *              "hce" and poll() returns the application-level credential
@@ -40,21 +43,13 @@
 
 #include "HceProtocol.h"
 #include "NfcReader.h"
+#include "RequestSigner.h"  // Signer::toHex — relay proof encoding
 #include "config.h"
 
-// The HCE pre-shared key lives ONLY in the gitignored secrets files
-// (HCE_SECRET in secrets.h / secrets.cam_reader.h / secrets.camera.h — see
-// the .example templates). A secrets file written before the HCE era has none: keep
-// compiling against the development-only prototype value (insecure
-// default + bilingual #warning) instead of breaking the user's local
-// file after a pull — same precedent as MODE_PASSWORD in main.cpp.
-// / La clave HCE vive SOLO en los secrets gitignorados. Un secrets.h
-// anterior a HCE sigue compilando con el valor de desarrollo (inseguro
-// + #warning bilingüe) en vez de romperse tras un pull.
-#ifndef HCE_SECRET
-#warning "HCE_SECRET not defined — using insecure development-only default; add it to include/secrets.h (see secrets.h.example). / HCE_SECRET no definido — valor de desarrollo inseguro; añádelo a include/secrets.h (ver secrets.h.example)."
-#define HCE_SECRET "dev-only-prototype-secret-001"
-#endif
+// TASK-015 (ADR-018): there is NO HCE secret on the reader any more. Each
+// phone has its own key (Android Keystore) and B2B-Core verifies the
+// relayed transcript with it. An old secrets file that still defines
+// HCE_SECRET is simply ignored. / Ya no hay secreto HCE en el lector.
 
 namespace Presence {
 
@@ -241,6 +236,7 @@ public:
             uidOut += hex[mfrc522_.tag.uid.uidByte[i] & 0x0F];
         }
         lastKind_ = "physical";
+        lastProof_.clear();
 
         // Release the card and stop any crypto session so the next tap works.
         mfrc522_.PICC_HaltA();
@@ -252,6 +248,13 @@ public:
 
     const char* lastKind() const override { return lastKind_; }
 
+    const HceProof& lastProof() const override { return lastProof_; }
+
+    void setEnrollment(bool on, const std::string& wrapSecret) override {
+        enrollment_ = on;
+        wrapSecret_ = on ? wrapSecret : std::string();
+    }
+
     /** True when the last VersionReg probe answered (station health). */
     bool healthy() const { return healthy_; }
 
@@ -261,12 +264,16 @@ public:
 private:
     /**
      * HCE tap: SELECT the Pulse AID, challenge the phone with a fresh
-     * random nonce, verify HMAC-SHA256(HCE_SECRET, credId || nonce).
+     * random nonce, and capture its len + credId + MAC answer as the
+     * relay proof (lastProof_). NOT verified here — the reader holds no
+     * key; B2B-Core checks it with the credential's own key (ADR-018).
+     * In pairing mode, ENROLL then fetches the phone's key, which is
+     * wrapped under this reader's API key and wiped from RAM.
      * On success uidOut holds the application-level credential id and
      * lastKind_ is "hce". Any failure releases the target and returns
      * false — a MIFARE tap is never affected (that path never runs here).
-     * / Toque HCE: SELECT del AID Pulse, challenge aleatorio, verificación
-     * HMAC. En éxito uidOut trae el id de credencial de aplicación.
+     * / Toque HCE: SELECT del AID Pulse, challenge aleatorio; la respuesta
+     * se retransmite al backend, que la verifica con la llave propia.
      */
     bool pollHce(std::string& uidOut) {
         // The phone randomizes its RF UID per tap (Android HCE): log the
@@ -327,8 +334,8 @@ private:
         }
 
         // Fresh random challenge per tap. The nonce travels in the clear
-        // over NFC, so logging it is safe (prototype behavior) — the
-        // HCE_SECRET itself is never printed anywhere.
+        // over NFC, so logging it is safe (prototype behavior). No key is
+        // involved on this side at all (ADR-018).
         uint8_t nonce[Hce::NONCE_LEN];
         for (size_t i = 0; i < Hce::NONCE_LEN; i++) {
             nonce[i] = static_cast<uint8_t>(esp_random());
@@ -361,23 +368,34 @@ private:
         }
 
         Hce::ChallengeResponse answer;
-        static const char kSecret[] = HCE_SECRET;
-        if (!Hce::parseChallengeResponse(resp, respLen, answer) ||
-            !Hce::verifyChallengeResponse(answer, nonce,
-                                          reinterpret_cast<const uint8_t*>(kSecret),
-                                          sizeof(kSecret) - 1)) {
+        if (!Hce::parseChallengeResponse(resp, respLen, answer)) {
             if (log_) {
-                log_->println("[NFC] HCE authentication FAILED (malformed or HMAC mismatch)");
+                if (Hce::isKeyMissing(resp, respLen)) {
+                    log_->println("[NFC] HCE phone has NO key yet (6A88) — link it: open \"Link this phone\" on it, PAIRING mode, armed desk / el teléfono no tiene llave: vincúlalo");
+                } else {
+                    log_->println("[NFC] HCE CHALLENGE answer malformed / respuesta mal formada");
+                }
             }
             releaseHce();
             return false;
         }
 
-        // Authenticated: the credential id — never the RF UID — is the tap.
+        lastProof_.clear();
+        lastProof_.nonceHex = Signer::toHex(nonce, Hce::NONCE_LEN);
+        lastProof_.macHex = Signer::toHex(answer.mac, Hce::HMAC_LEN);
+
+        if (enrollment_ && !collectKey(answer.credId, cmd, sizeof(cmd), resp, sizeof(resp))) {
+            lastProof_.clear();
+            releaseHce();
+            return false;
+        }
+
+        // Identified (proof relayed, verified server-side): the credential
+        // id — never the RF UID — is the tap.
         uidOut = answer.credId;
         lastKind_ = "hce";
         if (log_) {
-            log_->print("[NFC] HCE credential authenticated: ");
+            log_->print("[NFC] HCE credential read (proof relayed to backend): ");
             log_->println(uidOut.c_str());
         }
         releaseHce();
@@ -584,7 +602,11 @@ private:
                 log_->print(" salvaged ");
                 log_->print(n);
                 log_->print("B late answer, CRC ok: ");
-                logFrame(frame, n);
+                if (redactFrames_) {
+                    log_->println("<redacted: key material>");  // TASK-015: ENROLL carries the key
+                } else {
+                    logFrame(frame, n);
+                }
             }
 
             // S(WTX) request: grant it and go round again for the real answer.
@@ -616,6 +638,9 @@ private:
             }
             memcpy(resp, &frame[off], infLen);
             *respLen = infLen;
+            if (redactFrames_) {
+                memset(frame, 0, sizeof(frame));  // key-bearing copy off the stack
+            }
 
             // RESYNC THE BLOCK NUMBER — the bug that made every salvaged
             // tap die at CHALLENGE (hce.11 bench log).
@@ -775,6 +800,48 @@ private:
     }
 
     /** Polite release of the ISO-DEP target; errors ignored (see prototype). */
+    /**
+     * PAIRING only: ENROLL → the phone's 32-byte key (the phone answers
+     * only inside its user-opened enrollment window, else 6985), wrapped
+     * at once under this reader's API key with a fresh nonce; the raw key
+     * is wiped before return and is never logged.
+     */
+    bool collectKey(const std::string& credId, uint8_t* cmd, size_t cmdCap,
+                    uint8_t* resp, size_t respCap) {
+        if (wrapSecret_.empty()) {
+            if (log_) {
+                log_->println("[NFC] HCE enrollment: no reader key to wrap with / sin clave de lector");
+            }
+            return false;
+        }
+        const uint8_t enrollLen = static_cast<uint8_t>(Hce::buildEnroll(cmd, cmdCap));
+        uint8_t respLen = static_cast<uint8_t>(respCap);
+        redactFrames_ = true;  // never print the ENROLL answer's bytes
+        MFRC522::StatusCode sc = tclWithRetries(cmd, enrollLen, resp, &respLen,
+                                                static_cast<uint8_t>(respCap), 6, 25, "ENROLL");
+        redactFrames_ = false;
+        uint8_t key[Hce::KEY_LEN];
+        if (sc != MFRC522::STATUS_OK || !Hce::parseEnrollResponse(resp, respLen, key)) {
+            if (log_) {
+                log_->println("[NFC] HCE ENROLL refused — on the phone tap \"Link this phone\" first, then tap again / en el teléfono toca \"Vincular este teléfono\" y vuelve a acercarlo");
+            }
+            memset(resp, 0, respCap);
+            return false;
+        }
+        uint8_t keyNonce[Hce::KEY_NONCE_LEN];
+        for (size_t i = 0; i < Hce::KEY_NONCE_LEN; i++) {
+            keyNonce[i] = static_cast<uint8_t>(esp_random());
+        }
+        lastProof_.keyNonceHex = Signer::toHex(keyNonce, Hce::KEY_NONCE_LEN);
+        lastProof_.keyWrappedHex = Hce::wrapKeyHex(wrapSecret_, credId, lastProof_.keyNonceHex, key);
+        memset(key, 0, sizeof(key));
+        memset(resp, 0, respCap);  // the ENROLL frame held the raw key
+        if (log_) {
+            log_->println("[NFC] HCE key received and wrapped for pairing (never logged) / llave recibida y envuelta");
+        }
+        return true;
+    }
+
     void releaseHce() {
         setPcdTimeoutMs(kStockTimeoutMs);  // MIFARE needs the driver's RX back
         mfrc522_.TCL_Deselect(&mfrc522_.tag);
@@ -893,6 +960,10 @@ private:
     uint8_t ssPin_;
     Print* log_;                 // nullable diagnostics sink
     const char* lastKind_ = "physical";
+    HceProof lastProof_;         // TASK-015: relayed transcript (+ wrapped key in pairing)
+    bool enrollment_ = false;    // pairing mode → ENROLL after CHALLENGE
+    bool redactFrames_ = false;  // true while an ENROLL (key-bearing) exchange runs
+    std::string wrapSecret_;     // this reader's API key, only while enrolling
 
     bool healthy_ = false;       // last probe answered?
     uint8_t version_ = 0;        // last VersionReg byte seen

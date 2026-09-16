@@ -250,6 +250,8 @@ static void switchMode() {
     feedback.indicate(mode->kind() == ModeKind::Pairing ? FeedbackKind::IdlePairing
                                                         : FeedbackKind::IdleOperation);
     debouncer.reset();  // a tap in flight must not straddle the switch
+    // TASK-015: only PAIRING asks a phone for its key (ENROLL).
+    reader.setEnrollment(mode->kind() == ModeKind::Pairing, READER_API_KEY);
 }
 
 static void dispatchConsoleLine(const std::string& line, uint32_t now) {
@@ -398,7 +400,9 @@ static void handleCardTap(const std::string& uid) {
     //    ("hce" when poll() authenticated a phone through the APDU
     //    exchange) rides only into pairing as credential_kind — the tap
     //    lookup is credential_uid-only on purpose (RF UID ≠ identity).
-    ApiCall call = mode->onCardTap(uid, reader.lastKind());
+    // TASK-015: an HCE tap also carries the relayed proof (and, in
+    //    pairing, the wrapped key) — B2B-Core verifies it, not us.
+    ApiCall call = mode->onCardTap(uid, reader.lastKind(), reader.lastProof());
 
     // 2) Transport (never throws; failures → status < 0; a failure also
     //    triggers a cooldown-guarded rediscovery for the NEXT tap).
@@ -468,6 +472,14 @@ static void handleCardTap(const std::string& uid) {
                 // operator can retry immediately with a fresh card.
                 Serial.println("     use a FRESH card — the session stays armed / usa una");
                 Serial.println("     tarjeta NUEVA — la sesion sigue armada");
+                break;
+            case PairOutcome::ProofRejected:
+                // TASK-015: the phone's handed-over key did not verify its
+                // own proof (or it was replayed). Session stays armed.
+                Serial.print("[403] ");
+                Serial.println(result.message.c_str());
+                Serial.println("     on the phone tap \"Link this phone\" again, then re-tap /");
+                Serial.println("     en el telefono toca \"Vincular este telefono\" y acerca de nuevo");
                 break;
             case PairOutcome::AuthFailure:
                 Serial.println("[401] reader key rejected / clave de lector rechazada");

@@ -25,7 +25,8 @@ public:
     const char* hint() const override;
 
     ApiCall onCardTap(const std::string& credentialUid,
-                      const std::string& credentialKind = "") override;
+                      const std::string& credentialKind = "",
+                      const HceProof& proof = HceProof()) override;
 
     /** Reduce a parsed tap response into device feedback. */
     FeedbackSignal interpret(const TapResult& result) const;
@@ -38,7 +39,8 @@ public:
     const char* hint() const override;
 
     ApiCall onCardTap(const std::string& credentialUid,
-                      const std::string& credentialKind = "") override;
+                      const std::string& credentialKind = "",
+                      const HceProof& proof = HceProof()) override;
 
     /** Reduce a parsed pairing response into device feedback. */
     FeedbackSignal interpret(const PairResult& result) const;

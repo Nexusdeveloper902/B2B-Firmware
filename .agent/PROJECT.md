@@ -207,3 +207,20 @@ B2B-Core's `./run serve` now re-announces the service unasked from port
 no firmware change (4/4 boots, versus 0/2 without the announcer). The
 phone speaker bridge (B2B-App TASK-002) also consumes backend taps, so
 repeat taps and unknown cards now beep too (B2B-Core ADR-066).
+
+## TASK-015 delivery (2026-09-16, RUN-2026-09-16-firmware-018)
+
+- **The shared HCE secret is gone (ADR-018):**
+  - no `HCE_SECRET` in any template, fallback or source;
+  - the reader relays `hce_nonce` and `hce_mac`, and B2B-Core verifies
+    with that credential's own key (B2B-Core ADR-068).
+- **PAIRING mode adds `ENROLL` (`80 20 00 00 20`):** it fetches the
+  phone's key during the phone's one-time "Link this phone" window. The
+  key is wrapped under `READER_API_KEY` before it touches Wi-Fi, then
+  wiped. ENROLL frames never reach the log.
+- **Phone status `6A88`:** the phone has no key (never linked, or
+  reinstalled).
+- **Backend `403`:** a refused proof. It shows as the usual rejection
+  signal.
+- **Build and tests:** build `hce.19`; native 140/140; all 4 device envs
+  build; bench §10 rewritten and still pending.

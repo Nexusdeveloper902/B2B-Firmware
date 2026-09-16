@@ -52,6 +52,7 @@ TapResult parseTapResponse(int httpStatus, const std::string& body) {
         case 401:
             result.outcome = TapOutcome::AuthFailure;
             return result;
+        case 403:  // TASK-015: phone credential's relayed proof refused
         case 404:
             // Unknown card or non-active card — same rejection feedback;
             // the message distinguishes them for the serial log.
@@ -95,6 +96,11 @@ PairResult parsePairResponse(int httpStatus, const std::string& body) {
         }
         case 401:
             result.outcome = PairOutcome::AuthFailure;
+            return result;
+        case 403:
+            // TASK-015: the phone's handed-over key did not verify its own
+            // proof (or was replayed). The window stays armed.
+            result.outcome = PairOutcome::ProofRejected;
             return result;
         case 409:
             result.outcome = PairOutcome::NoActiveSession;

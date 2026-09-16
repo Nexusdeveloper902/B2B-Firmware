@@ -158,29 +158,43 @@ Los prefijos del registro serial (`[NFC] [OK] [404] [409] [422] [401]
 - [ ] 9.1 Apaga y enciende 3 veces seguidas; cada arranque llega al patrón
       de reposo en menos de 20 s y se mantiene estable 2 min.
 
-## 10. Teléfono HCE de Android (ruta ISO-DEP + APDU)
+## 10. Teléfono HCE de Android (ruta ISO-DEP + APDU, llaves por credencial)
 
 - [ ] 10.1 Instala `B2B-App/pulse-credential` en el teléfono, activa NFC,
-      abre la app una vez (`READY TO TAP`). Confirma que `HCE_SECRET`
-      coincide con `include/secrets.h` (el mismatch falla cerrado por diseño).
-- [ ] 10.2 OPERACIÓN, teléfono sin emparejar: toca + sostén 1–2 s → el
-      serial muestra `ISO-DEP target` + `HCE credential authenticated:
-      <credId>` y `[404]` (tarjeta desconocida) + la pista de emparejar —
-      NADA de UID hex. Lee primero la línea `target SAK=…`: `0x08` = el
-      teléfono no ofrece HCE (revisa el lado del teléfono), `0x20` +
-      `ATS=0B` = RATS falló (sostén el teléfono más quieto/tiempo, quita
-      la funda, reintenta). Las tarjetas MIFARE siguen tocando normal (sin regresión).
-- [ ] 10.3 EMPAREJAR, ventana armada: toca el teléfono → `[OK] card paired
-      to:` + línea de éxito en el escritorio; la fila `cards` del backend
-      tiene `kind = hce` y el escritorio la marca “Teléfono”.
-- [ ] 10.4 OPERACIÓN, teléfono emparejado: toca → `[OK] event logged` del
-      estudiante correcto. Toca 3×, anota que las líneas de longitud de UID
-      difieren por toque (UID RF aleatorizado) mientras el MISMO id
-      autentica — la prueba de independencia del UID (spec §“Evidencia de
-      independencia del UID”).
-- [ ] 10.5 Revoca la tarjeta en el servidor (`status = revoked`) → el
-      teléfono toca `[404]`; desvincula → toca `[404]`; re-empareja a otro
-      estudiante → funciona con `kind = hce` preservado.
+      abre la app una vez. Sin llave, la tarjeta muestra `SIN VINCULAR`
+      (Diagnóstico → Llave de la credencial: falta). NO hay secreto HCE
+      que igualar en el lector (ADR-018).
+- [ ] 10.2 OPERACIÓN, teléfono sin vincular: toca + sostén 1–2 s → el
+      serial muestra `ISO-DEP target` + `HCE phone has NO key yet (6A88)`
+      y ninguna llamada al backend — NADA de UID hex. Lee primero la línea
+      `target SAK=…`: `0x08` = el teléfono no ofrece HCE (revisa el lado
+      del teléfono), `0x20` + `ATS=0B` = RATS falló (sostén el teléfono
+      más quieto/tiempo, quita la funda, reintenta). Las tarjetas MIFARE
+      siguen tocando normal (sin regresión).
+- [ ] 10.3 EMPAREJAR, ventana armada, ventana de vinculación del teléfono
+      SIN abrir: toca → `HCE ENROLL refused`; no se crea fila de tarjeta;
+      la sesión sigue armada.
+- [ ] 10.4 EMPAREJAR, ventana armada: en el teléfono «Vincular este
+      teléfono» → Empezar, luego toca → `HCE key received and wrapped …`
+      + `[OK] card paired to:`; la fila `cards` tiene `kind = hce`, existe
+      una fila en `hce_credential_keys` y el escritorio la marca
+      “Teléfono”. Confirma que el log serial NO muestra ningún valor de 64
+      hex con pinta de llave.
+- [ ] 10.5 OPERACIÓN, teléfono emparejado: toca → `HCE credential read
+      (proof relayed …)` + `[OK] event logged` del estudiante correcto.
+      Toca 3× (también con la pantalla bloqueada), anota que las líneas de
+      longitud de UID difieren por toque (UID RF aleatorizado) mientras el
+      MISMO id se acepta — la prueba de independencia del UID.
+- [ ] 10.6 Revoca el teléfono en el escritorio de emparejamiento → el
+      siguiente toque `[404]` (inactivo). Rearma al mismo estudiante +
+      vincula de nuevo → `[422]` (un teléfono revocado nunca recibe llave
+      nueva). Desvincula → vincula + empareja → funciona.
+- [ ] 10.7 Reinstala la app (mismo id, Keystore borrado): toca → `6A88`;
+      rearma al MISMO estudiante + vincula → `[OK]` (llave nueva), el
+      historial anterior se conserva.
+- [ ] 10.8 Registra tiempos: SELECT→CHALLENGE (HMAC en Keystore) sigue
+      dentro del presupuesto de espera de trama del teléfono en este
+      equipo (compara con las notas de banco previas a TASK-015).
 
 ---
 

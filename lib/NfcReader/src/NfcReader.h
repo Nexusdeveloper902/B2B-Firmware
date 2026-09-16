@@ -12,6 +12,8 @@
 
 #include <string>
 
+#include "CoreTypes.h"
+
 namespace Presence {
 
 class NfcReader {
@@ -36,6 +38,24 @@ public:
 
     /** HOW the last successful poll's credential was captured. */
     virtual const char* lastKind() const { return "physical"; }
+
+    /**
+     * TASK-015 (ADR-018): the relayed HCE transcript of the last
+     * successful poll (empty for physical cards). The reader does not
+     * verify it — B2B-Core does, with that credential's own key.
+     */
+    virtual const HceProof& lastProof() const {
+        static const HceProof kNone;
+        return kNone;
+    }
+
+    /**
+     * TASK-015: PAIRING mode on/off. Only while on does an HCE poll also
+     * request the phone's key (ENROLL) and wrap it with wrapSecret (this
+     * reader's API key) for the pair call. Off = operation taps never ask
+     * a phone for its key.
+     */
+    virtual void setEnrollment(bool /*on*/, const std::string& /*wrapSecret*/) {}
 
     /** Short label for the serial log. */
     virtual const char* label() const = 0;

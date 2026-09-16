@@ -110,7 +110,7 @@ private:
     bool captureHighResolution();
     void flagCameraFailure();  // repeated runtime fb_get failures → re-init path
     void doCaptureAndUpload();
-    void doAssociate(const std::string& uid);
+    void doAssociate(const std::string& uid, const HceProof& proof = HceProof());
     void handleCaptureCommand(const CaptureCommand& cmd);
     void expireStaleTransactions(uint32_t now);  // anti-steal timeouts
     void reportUpload(const char* what, int status, const String& body, bool transportOk);

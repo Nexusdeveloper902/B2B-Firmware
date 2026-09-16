@@ -73,6 +73,13 @@ TASK-003).
   credencial a nivel de aplicación para un toque HCE de teléfono (p. ej.
   `TEST-ANDROID-001` — jamás el UID RF del teléfono, que Android
   aleatoriza por toque; ver [HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md)). Obligatorio.
+- `hce_nonce` / `hce_mac` — solo toques HCE de teléfono (TASK-015,
+  ADR-018): el nonce CHALLENGE de 8 bytes del lector (16 hex) y el HMAC
+  del teléfono (64 hex), retransmitidos sin verificar — B2B-Core los
+  comprueba con la llave propia de esa credencial y responde `403` si no
+  verifican (se interpreta como `CardNotRecognized`). Se omiten en
+  tarjetas físicas. Los mismos dos campos van en
+  `/recycling/captures/{id}/associate`.
 - `client_timestamp` — reloj del dispositivo ISO 8601 opcional; el
   firmware lo omite por ahora y deja que el servidor feche el evento (un
   reloj roto nunca debe perder el toque — el backend también degrada con
@@ -112,19 +119,31 @@ resultado, FAQ — está en [PAIRING.es.md](PAIRING.es.md) (TASK-004).
 { "credential_uid": "A1B2C3D4" }
 ```
 
-Los teléfonos HCE añaden el kind de captura (construido por
-`Presence::buildPairPayload(uid, reader.lastKind())` — la raíz de
-composición pasa `NfcReader::lastKind()`, `"hce"` solo cuando `poll()`
-autenticó el teléfono vía SELECT AID + CHALLENGE):
+Los teléfonos HCE añaden el kind de captura Y la entrega única de la
+llave (construido por
+`Presence::buildPairPayload(uid, reader.lastKind(), reader.lastProof())`
+— `"hce"` solo cuando `poll()` completó SELECT AID + CHALLENGE + ENROLL):
 
 ```json
-{ "credential_uid": "TEST-ANDROID-001", "credential_kind": "hce" }
+{
+  "credential_uid": "PLS-K3Y7V3CT0R5Z",
+  "credential_kind": "hce",
+  "hce_nonce": "0123456789abcdef",
+  "hce_mac": "ba6d0fbf…a295",
+  "hce_key_nonce": "000102030405060708090a0b0c0d0e0f",
+  "hce_key_wrapped": "c5bb9fe1…14c2"
+}
 ```
 
-El kind se guarda como `cards.kind` (solo visualización/auditoría — la
-búsqueda del tap es solo por `credential_uid`); omitirlo empareja como
-`physical`, así el firmware viejo no necesita cambios. Especificación
-completa a nivel de bytes: [HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md).
+`hce_key_wrapped` es la llave del teléfono XOR un pad derivado de
+`READER_API_KEY` (nunca la llave cruda). El backend rechaza un
+emparejamiento `hce` sin estos campos (`422`), responde `403` si la
+prueba no verifica con la llave entregada (`PairOutcome::ProofRejected`,
+la sesión sigue armada) y renueva la llave de un teléfono activo del
+mismo estudiante armado (`"rekeyed": true`). El kind se guarda como
+`cards.kind`; omitirlo empareja como `physical`, así los cuerpos de
+tarjetas físicas no cambian. Especificación completa a nivel de bytes:
+[HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md).
 
 **Respuestas y manejo del firmware** (parseo: `Presence::parsePairResponse`):
 

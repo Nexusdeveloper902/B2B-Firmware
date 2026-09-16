@@ -47,9 +47,14 @@ public:
      * forwards it (as credential_kind); the tap lookup is
      * credential_uid-only, so operation mode ignores it. Default keeps
      * every existing caller compiling unchanged.
+     *
+     * TASK-015: proof is the relayed HCE transcript (and, in pairing,
+     * the wrapped key). Both strategies forward it; it is empty for
+     * physical cards, whose payloads stay byte-identical.
      */
     virtual ApiCall onCardTap(const std::string& credentialUid,
-                              const std::string& credentialKind = "") = 0;
+                              const std::string& credentialKind = "",
+                              const HceProof& proof = HceProof()) = 0;
 };
 
 }  // namespace Presence

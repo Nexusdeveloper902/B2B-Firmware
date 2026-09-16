@@ -318,23 +318,39 @@ imprimen la primera línea):
 
 Un teléfono con la app HCE de Pulse (`B2B-App/pulse-credential`) se
 empareja y toca por este flujo exacto — armar, modo EMPAREJAR, tocar
-dentro de la ventana — con dos diferencias del lado del equipo, ambas
-automáticas:
+dentro de la ventana — más **un paso en el teléfono**, porque emparejar es
+también cuando el teléfono entrega su propia llave (TASK-015, ADR-018):
 
-1. Sostén el teléfono quieto 1–2 s sobre la antena (la activación
-   ISO-DEP + dos APDUs toman más que leer un UID MIFARE).
-2. El serial muestra las líneas HCE (`ISO-DEP target … ignored as
-   identity` → `HCE credential authenticated: <credId>`) en vez de un
-   UID hex, y la llamada de emparejamiento lleva
-   `"credential_kind": "hce"` (se guarda como `cards.kind`; el
-   escritorio lo marca “Teléfono”).
+1. En el teléfono, toca **«Vincular este teléfono»** → **Empezar** (la
+   tarjeta muestra `VINCULANDO` y una cuenta regresiva de 60 s). Esto crea
+   una llave NUEVA en el Keystore del teléfono y abre una ventana de
+   entrega de un solo uso.
+2. Arma al estudiante en el escritorio, lector en modo EMPAREJAR, y
+   sostén el teléfono quieto 1–2 s sobre la antena (activación ISO-DEP +
+   tres APDUs).
+3. El serial muestra `ISO-DEP target … ignored as identity` →
+   `HCE credential read (proof relayed to backend): <credId>` →
+   `HCE key received and wrapped for pairing (never logged)`, y la llamada
+   de emparejamiento lleva `"credential_kind": "hce"` más la prueba y la
+   llave envuelta. El teléfono muestra `LLAVE ENTREGADA`; el escritorio
+   marca la tarjeta “Teléfono”.
 
 Todo lo demás — 409 sin sesión, 422 sin reasignación, consumo de un solo
 uso, tap inmediato tras emparejar — es idéntico, porque el id de
 credencial a nivel de aplicación del teléfono ES el `credential_uid`.
-`HCE authentication FAILED` significa que teléfono y lector discrepan en
-`HCE_SECRET` (compara con `B2B-App/pulse-credential`). El UID RF del
-teléfono jamás es identidad (Android lo aleatoriza por toque).
+Resultados propios del teléfono:
+
+| Serial | Significado → solución |
+|---|---|
+| `HCE ENROLL refused …` | La ventana de vinculación del teléfono no está abierta (o ya se usó) → toca «Vincular este teléfono» otra vez y vuelve a acercarlo |
+| `HCE phone has NO key yet (6A88)` (modo operación) | Teléfono nunca vinculado, o reinstalado → vincúlalo (pasos 1–3) |
+| `[403] No se pudo verificar la credencial del teléfono` (emparejando) | La llave entregada no verificó la prueba del teléfono → reabre la ventana y vuelve a acercarlo; la sesión sigue armada |
+| `[403]` en un toque (se ve como un rechazo tipo `[404]`) | Llave errónea/vieja, repetición, o el teléfono no se re-vinculó tras reinstalar |
+| `[OK] … paired` con un teléfono ya emparejado | Mismo estudiante → el teléfono recibió **llave nueva** (recuperación tras reinstalar); su historial se conserva |
+
+Ya no hay secreto HCE que configurar en el lector. El UID RF del teléfono
+jamás es identidad (Android lo aleatoriza por toque). Teléfono perdido:
+**Revócalo** en el escritorio de emparejamiento (destruye su llave).
 Especificación completa a nivel de bytes:
 [HCE_PROTOCOL.es.md](HCE_PROTOCOL.es.md).
 

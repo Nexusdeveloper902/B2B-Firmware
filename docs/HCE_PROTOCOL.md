@@ -1,4 +1,4 @@
-# Pulse HCE Credential Protocol (v1)
+# Pulse HCE Credential Protocol (v1.1 — per-credential keys)
 
 > También disponible en: [Español](HCE_PROTOCOL.es.md)
 > Canonical byte-level reference for the phone-as-credential path.
@@ -10,7 +10,18 @@
 > wire bytes are unchanged; what changed is the integration around them
 > (credential kind, Pulse endpoints, desk UI).
 
-Phone-as-credential over NFC for ESP32 + RC522. Deliberately tiny: two APDUs.
+Phone-as-credential over NFC for ESP32 + RC522. Deliberately tiny: two APDUs
+per tap, plus a third, one-time APDU (ENROLL) at pairing.
+
+> **v1.1 (TASK-015, ADR-018; B2B-Core ADR-068; B2B-App ADR-004).** The
+> SELECT and CHALLENGE bytes are **unchanged**. What changed is the key:
+> there is **no shared `HCE_SECRET` anywhere** any more. Every phone
+> credential has its own 256-bit key, stored in that phone's Android
+> Keystore; B2B-Core holds the only other copy, encrypted at rest. The
+> **reader holds no HCE key and verifies nothing**: it relays its nonce
+> and the phone's MAC, and **B2B-Core verifies** them with that
+> credential's key. Additive changes are the `ENROLL` APDU (pairing
+> only) and the `6A88` status word (no key on the phone).
 
 ```text
 NFC-A
@@ -18,9 +29,11 @@ NFC-A
 ISO-DEP (ISO/IEC 14443-4)
   ↓  RATS / ATS (+ PPS), I-blocks via MFRC522Extended::TCL_Transceive
 APDU
-  ↓  SELECT AID -> CHALLENGE -> verify
+  ↓  SELECT AID -> CHALLENGE [-> ENROLL, pairing only]
 Pulse credential protocol (application-level identity)
-  ↓  credential_uid + credential_kind=hce → B2B-Core
+  ↓  credential_uid + hce_nonce + hce_mac (+ wrapped key at pairing) → B2B-Core
+B2B-Core
+  ↓  HMAC-SHA256(K_cred, credId || nonce) == hce_mac ? (constant time, nonce single-use)
 ```
 
 No MIFARE Classic anywhere on this path: Android HCE cannot emulate it,
@@ -83,22 +96,86 @@ Response:
 
 ```text
 credLen (1) | credId (1-32, ASCII) | HMAC-SHA256 (32) | 90 00
-MAC = HMAC-SHA256(key = HCE_SECRET, msg = credId || nonce)
+MAC = HMAC-SHA256(key = K_cred, msg = credId || nonce)
 ```
 
-The reader recomputes the MAC over the credential id it received plus the
-nonce it sent, and compares in constant time. Secrets are never logged
-(only the per-tap nonce and the public id); a mismatch fails closed.
+`K_cred` is **this credential's own key** (32 bytes, Android Keystore on
+the phone). A phone that has no usable key answers **`6A88`** instead of
+a MAC (not linked yet, or the Keystore was wiped by a reinstall).
+
+The reader does **not** verify the MAC — it has no key. It sends the
+credential id, its own nonce (`hce_nonce`, 16 hex) and the phone's MAC
+(`hce_mac`, 64 hex) to B2B-Core, which recomputes the MAC with that
+credential's stored key, compares in constant time, and accepts each
+nonce once per credential. The nonce and MAC are safe to log; key
+material never is. Any mismatch fails closed on the backend (`403`).
+
+## APDU 3 — ENROLL (pairing only, one-time key hand-off)
+
+Sent by a reader in **PAIRING mode only**, right after CHALLENGE in the
+same session. Request (5 bytes; the 4-byte header without `Le` is also
+accepted; a data field is `6700`):
+
+```text
+CLA | INS | P1 | P2 | Le
+ 80 | 20  | 00 | 00 | 20
+```
+
+Response, only while the holder has opened the phone's **enrollment
+window** ("Link this phone", 60 s), and **only once** per window:
+
+```text
+K_cred (32) | 90 00          (34 bytes: fits one RC522 I-block)
+```
+
+Otherwise `6985` (window closed, expired, already released, or not
+SELECTed). Opening the window first **replaces** the phone's key in the
+Keystore, so a copy read by anyone else becomes useless the moment the
+holder retries.
+
+The reader never sends `K_cred` in clear over Wi-Fi. It wraps it with a
+fresh 16-byte nonce and its own API key:
+
+```text
+hce_key_nonce   = 32 hex chars (esp_random, fresh per pairing)
+pad             = HMAC-SHA256(READER_API_KEY,
+                    "pulse-hce-key-wrap/v1\n" || credId || "\n" || hce_key_nonce)
+hce_key_wrapped = hex(K_cred XOR pad)
+```
+
+The pair request is also Pulse-HMAC signed (ADR-016: body-bound,
+single-use nonce). B2B-Core unwraps the key, requires the same tap's
+CHALLENGE proof to verify under it (proof of possession), then stores it
+encrypted. The raw key is wiped from the reader's RAM right after
+wrapping and is never logged (the retry path redacts ENROLL frames).
+
+## Shared test vector (pinned in all three repos)
+
+| Item | Value |
+|---|---|
+| `K_cred` | `000102…1f` (bytes 0..31) |
+| `credId` | `PLS-K3Y7V3CT0R5Z` |
+| `nonce` | `0123456789abcdef` |
+| `MAC` | `ba6d0fbf5106f79257727819d19a17b7e15abc4b8a0d1bfe71cd76090488a295` |
+| CHALLENGE response | `10` `504c532d4b335937563343543052355a` `ba6d…a295` `9000` |
+| `READER_API_KEY` | `test-secret-000000000000000001` |
+| `hce_key_nonce` | `000102030405060708090a0b0c0d0e0f` |
+| `hce_key_wrapped` | `c5bb9fe15dff66a8636366dd4e73e0a3146601e3b3c36472961de142a9a914c2` |
+
+Computed outside all three implementations (Python `hmac`); pinned in
+`test/test_hce_protocol.cpp` here, `HceCredentialAuthTest` in B2B-Core,
+and `ApduProtocolTest` in B2B-App. Each suite also pins RFC 4231
+known-answer HMAC vectors.
 
 ## Pulse integration (what the prototype did not have)
 
 | Step | Behavior |
 |---|---|
-| Reader → backend (pair) | `POST /api/v1/admin/cards/pair` with `{"credential_uid": "<credId>", "credential_kind": "hce"}` — same arm-then-pair flow, same 409/422 semantics as physical cards |
-| Reader → backend (tap) | `POST /api/v1/events/tap` with `{"credential_uid": "<credId>"}` — kind intentionally NOT sent (lookup is uid-only); phone taps resolve `credential → student → attendance / PAE / recycling` through the unchanged event spine |
-| Backend storage | `cards.kind` (`physical` \| `hce`, default `physical`) — display/audit metadata; old firmware omitting the kind pairs exactly as before |
+| Reader → backend (pair) | `POST /api/v1/admin/cards/pair` with `{"credential_uid", "credential_kind": "hce", "hce_nonce", "hce_mac", "hce_key_nonce", "hce_key_wrapped"}` — same arm-then-pair flow and 409/422 semantics as physical cards; `403` = proof did not verify under the handed-over key; an active phone of the **same** armed student is re-keyed (`"rekeyed": true`) |
+| Reader → backend (tap) | `POST /api/v1/events/tap` with `{"credential_uid", "hce_nonce", "hce_mac"}` — kind intentionally NOT sent (it is server-side); a phone card without a valid, fresh proof answers `403 hce_auth_failed`. Same fields on `/recycling/captures/{id}/associate` |
+| Backend storage | `cards.kind` (`physical` \| `hce`) + `hce_credential_keys` (one encrypted key per phone card); revocation (`POST /admin/cards/{id}/revoke`) destroys the key |
 | Desk UI | Phone credentials badged (“Phone” / “Teléfono”) in roster chips, recent-pairings history (SSR + live WS rows) and the students desk |
-| Key provisioning | `HCE_SECRET` in gitignored `secrets.h` / `secrets.camera.h` (templates document it); MUST match the Android app's secret or every phone tap fails closed. A secrets file predating HCE builds against the development-only default with a `#warning` (same precedent as `MODE_PASSWORD`) |
+| Key provisioning | Per credential, at pairing: the holder opens "Link this phone", the reader (PAIRING mode) sends ENROLL and wraps the key under `READER_API_KEY`. **No HCE key exists in any secrets file, build flag or source.** An old secrets file that still defines `HCE_SECRET` is ignored |
 
 ## Status words
 
@@ -106,8 +183,9 @@ nonce it sent, and compares in constant time. Secrets are never logged
 |---|---|---|
 | `9000` | Success | SELECT matched / CHALLENGE answered |
 | `6A82` | App not found | SELECT with any other AID |
-| `6985` | Conditions not satisfied | CHALLENGE before SELECT |
-| `6700` | Wrong length | `Lc` ≠ 7 (SELECT) / ≠ 8 (CHALLENGE), truncated APDU |
+| `6985` | Conditions not satisfied | CHALLENGE/ENROLL before SELECT; ENROLL with no open enrollment window |
+| `6A88` | Referenced data not found | CHALLENGE on a phone with no usable key (not linked / reinstalled) |
+| `6700` | Wrong length | `Lc` ≠ 7 (SELECT) / ≠ 8 (CHALLENGE), ENROLL with data, truncated APDU |
 | `6D00` | INS unknown | Known CLA, unknown instruction |
 | `6E00` | CLA unknown | First byte not `00`/`80` |
 
@@ -118,7 +196,8 @@ nonce it sent, and compares in constant time. Secrets are never logged
 | SELECT request | 13 bytes (with optional Le) |
 | SELECT response | 8 bytes |
 | CHALLENGE request | 14 bytes (with optional Le) |
-| CHALLENGE response | up to 67 bytes (1 + 32 + 32 + 2; prototype uses 51) |
+| CHALLENGE response | up to 67 bytes (1 + 32 + 32 + 2; `PLS-` ids use 51) |
+| ENROLL request / response | 5 bytes / 34 bytes |
 | Single I-block INF | ~57 B — the 51-byte prototype response fits; a 32-byte credential id needs reader-side chaining ACKs (already implemented in `TCL_Transceive`) |
 
 ## Error conditions (reader diagnostics)
@@ -141,7 +220,10 @@ that RATS falls through to the UID path. No PPS is negotiated —
 
 `HCE SELECT failed` (no I-block
 reply) · `HCE SELECT rejected (unknown AID)` (`6A82`) · `HCE CHALLENGE
-timeout` · `HCE authentication FAILED (malformed or HMAC mismatch)`.
+timeout` · `HCE phone has NO key yet (6A88)` · `HCE CHALLENGE answer
+malformed` · `HCE ENROLL refused` (pairing: the phone's window is not
+open). A wrong key is no longer a reader-side error: the tap reaches the
+backend and answers `403` (`[404]`-style rejection on the serial).
 Every failure releases the target (`TCL_Deselect` + `PICC_HaltA`) and the
 device stays responsive; MIFARE taps are never affected (that path never
 runs for ISO-DEP targets, and vice versa).
@@ -155,14 +237,38 @@ runs for ISO-DEP targets, and vice versa).
    no `rf_uid` column exists; a non-hex credential id (impossible as an
    RF UID) pairs and taps end-to-end, twice, to the same student.
 3. **Bench** (checklist §10): log the RF UID length across taps (it
-   changes), verify the same credential id authenticates every time.
+   changes), verify the same credential id is accepted every time.
 
-## Production hardening (explicitly out of scope)
+## Security boundaries (what v1.1 does and does not guarantee)
 
-Single development pre-shared key → per-credential keys from a secure
-backend; add replay protection (reader-tracked challenge store /
-monotonic counter); mutual authentication + encrypted channel (e.g.
-SCP03-style); key rotation; side-channel review. The reader's Bearer key
-vouches for the verified credential to the backend — the same trust a
-physical UID gets. This spec proves the NFC path and the Pulse
-integration, not a credential system.
+**Guaranteed now**
+- No shared HCE secret: dumping one APK, one reader or one secrets file
+  yields no key that works for any other credential.
+- A phone key authenticates only its own credential id (the id is inside
+  the MAC, and the backend looks the key up by that id).
+- Readers cannot forge phone taps: a valid reader signature without a
+  valid, fresh phone proof is refused (`403`).
+- Replayed transcripts are refused (per-credential nonce memory, 7 days).
+- Revocation (lost/stolen phone) destroys the backend key; the phone's
+  key is then worthless even if the card status were flipped back.
+- Provisioning cannot overwrite another student's credential: only an
+  active phone of the student the admin armed can be re-keyed.
+
+**Still true (documented limits, not solved here)**
+- Unilateral authentication, reader-chosen nonce: someone holding a
+  reader key who skims a phone can present that one transcript once
+  (pre-play) before the phone's next legitimate tap. The backend
+  refuses it after first use.
+- The key crosses NFC in clear **once**, during the holder-opened,
+  single-release enrollment window at the desk. An eavesdropper at that
+  exact moment could copy it. Mitigation: the window is short and
+  single-use, and re-linking rotates the key.
+- The backend is the trust root: its database plus `APP_KEY` expose
+  every phone key (symmetric scheme). An asymmetric (ECDSA) credential
+  would remove this, at the cost of a new CHALLENGE format beyond one
+  RC522 I-block.
+- The phone answers while locked (policy: `requireDeviceUnlock=false`,
+  no user-auth-bound key). A stolen phone taps until it is revoked.
+- Physical MIFARE UIDs still have no cryptography (clonable).
+- Mutual authentication, an encrypted NFC channel and a side-channel
+  review remain out of scope.

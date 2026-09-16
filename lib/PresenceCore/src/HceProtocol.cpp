@@ -31,6 +31,18 @@ size_t buildChallenge(const uint8_t nonce[NONCE_LEN], uint8_t* out, size_t cap) 
     return 5 + NONCE_LEN;
 }
 
+size_t buildEnroll(uint8_t* out, size_t cap) {
+    if (out == nullptr || cap < 5) {
+        return 0;
+    }
+    out[0] = CLA_AUTH;
+    out[1] = INS_ENROLL;
+    out[2] = 0x00;
+    out[3] = 0x00;
+    out[4] = static_cast<uint8_t>(KEY_LEN);  // Le
+    return 5;
+}
+
 bool isOk(const uint8_t* resp, size_t len) {
     return resp != nullptr && len >= 2 && resp[len - 2] == 0x90 && resp[len - 1] == 0x00;
 }
@@ -69,6 +81,18 @@ bool parseChallengeResponse(const uint8_t* resp, size_t len, ChallengeResponse& 
     out.credId.assign(reinterpret_cast<const char*>(resp + 1), credLen);
     memcpy(out.mac, resp + 1 + credLen, HMAC_LEN);
     out.ok = true;
+    return true;
+}
+
+bool isKeyMissing(const uint8_t* resp, size_t len) {
+    return resp != nullptr && len == 2 && resp[0] == 0x6A && resp[1] == 0x88;
+}
+
+bool parseEnrollResponse(const uint8_t* resp, size_t len, uint8_t key[KEY_LEN]) {
+    if (resp == nullptr || key == nullptr || len != KEY_LEN + 2 || !isOk(resp, len)) {
+        return false;
+    }
+    memcpy(key, resp, KEY_LEN);
     return true;
 }
 
@@ -229,26 +253,27 @@ void hmacSha256(const uint8_t* key, size_t keyLen,
     sha256Final(&outer, out);
 }
 
-bool verifyChallengeResponse(const ChallengeResponse& r,
-                             const uint8_t nonce[NONCE_LEN],
-                             const uint8_t* key, size_t keyLen) {
-    if (!r.ok || nonce == nullptr || key == nullptr || keyLen == 0) {
-        return false;
+std::string wrapKeyHex(const std::string& readerSecret,
+                       const std::string& credId,
+                       const std::string& keyNonceHex,
+                       const uint8_t key[KEY_LEN]) {
+    if (key == nullptr) {
+        return std::string();
     }
-    uint8_t msg[MAX_CRED_LEN + NONCE_LEN];
-    const size_t credLen = r.credId.size();
-    if (credLen == 0 || credLen > MAX_CRED_LEN) {
-        return false;
+    const std::string label = std::string("pulse-hce-key-wrap/v1\n") + credId + "\n" + keyNonceHex;
+    uint8_t pad[HMAC_LEN];
+    hmacSha256(reinterpret_cast<const uint8_t*>(readerSecret.data()), readerSecret.size(),
+               reinterpret_cast<const uint8_t*>(label.data()), label.size(), pad);
+    static const char* hex = "0123456789abcdef";
+    std::string out;
+    out.reserve(KEY_LEN * 2);
+    for (size_t i = 0; i < KEY_LEN; i++) {
+        const uint8_t b = static_cast<uint8_t>(key[i] ^ pad[i]);
+        out += hex[b >> 4];
+        out += hex[b & 0x0F];
     }
-    memcpy(msg, r.credId.data(), credLen);
-    memcpy(msg + credLen, nonce, NONCE_LEN);
-    uint8_t expect[HMAC_LEN];
-    hmacSha256(key, keyLen, msg, credLen + NONCE_LEN, expect);
-    uint8_t diff = 0;  // constant-time compare: no early exit
-    for (size_t i = 0; i < HMAC_LEN; i++) {
-        diff |= static_cast<uint8_t>(expect[i] ^ r.mac[i]);
-    }
-    return diff == 0;
+    memset(pad, 0, sizeof(pad));
+    return out;
 }
 
 }  // namespace Hce

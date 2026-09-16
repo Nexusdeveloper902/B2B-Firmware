@@ -4,12 +4,19 @@
  *
  * Byte-exact mirror of the Android ApduProtocol object and the canonical
  * spec in docs/HCE_PROTOCOL.md: SELECT AID F0010203040506, then an
- * 8-byte CHALLENGE answered with len + credId + HMAC-SHA256(HCE_SECRET,
+ * 8-byte CHALLENGE answered with len + credId + HMAC-SHA256(K_cred,
  * credId || nonce) + 9000.
  *
+ * TASK-015 (ADR-018): K_cred is PER CREDENTIAL and this reader never
+ * holds it. The reader RELAYS the transcript (nonce + MAC) and B2B-Core
+ * verifies it with that credential's key. In PAIRING mode only, the
+ * ENROLL APDU collects the phone's key once (inside the phone's
+ * user-opened enrollment window) and wrapKeyHex() seals it under this
+ * reader's API key before it touches Wi-Fi.
+ *
  * Pure C++ (no Arduino headers) so the whole application protocol —
- * builders, parsers AND the HMAC verification — is host-testable in the
- * `native` env. The RF/ISO-DEP transport (RATS, I-blocks) stays in
+ * builders, parsers, the relay proof and the key wrap — is host-testable
+ * in the `native` env. The RF/ISO-DEP transport (RATS, I-blocks) stays in
  * Rc522NfcReader, which owns the MFRC522Extended driver.
  * / C++ puro (sin cabeceras de Arduino): todo el protocolo de aplicación
  * es testeable en el host. El transporte RF/ISO-DEP vive en Rc522NfcReader.
@@ -33,10 +40,13 @@ static const uint8_t CLA_PROTO = 0x00;  // SELECT AID
 static const uint8_t INS_SELECT = 0xA4;
 static const uint8_t CLA_AUTH = 0x80;  // prototype auth commands
 static const uint8_t INS_CHALLENGE = 0x10;
+static const uint8_t INS_ENROLL = 0x20;  // TASK-015: one-time key hand-off
 
 static const size_t NONCE_LEN = 8;    // reader challenge length
 static const size_t HMAC_LEN = 32;    // HMAC-SHA256 length
 static const size_t MAX_CRED_LEN = 32;  // longest credential id accepted
+static const size_t KEY_LEN = 32;     // per-credential HMAC key
+static const size_t KEY_NONCE_LEN = 16;  // key-wrap nonce (32 hex chars)
 
 // RC522 FIFO = 64 B: every message below fits one I-block (~57 B INF),
 // so no phone-side chaining is ever needed.
@@ -46,6 +56,12 @@ size_t buildSelectAid(uint8_t* out, size_t cap);
 
 /** Builds: 80 10 00 00 Lc nonce (no Le). Returns bytes written (13), 0 when cap is short. */
 size_t buildChallenge(const uint8_t nonce[NONCE_LEN], uint8_t* out, size_t cap);
+
+/**
+ * Builds: 80 20 00 00 20 (Le = 32, no data). Returns bytes written (5),
+ * 0 when cap is short. Sent ONLY in pairing mode, after CHALLENGE.
+ */
+size_t buildEnroll(uint8_t* out, size_t cap);
 
 /** True when the response ends in 90 00 (at least the status word present). */
 bool isOk(const uint8_t* resp, size_t len);
@@ -73,6 +89,18 @@ struct ChallengeResponse {
  */
 bool parseChallengeResponse(const uint8_t* resp, size_t len, ChallengeResponse& out);
 
+/**
+ * True when the phone answered 6A88: it has no provisioned key yet (or
+ * lost it — reinstall). The operator fix is enrollment, not a retry.
+ */
+bool isKeyMissing(const uint8_t* resp, size_t len);
+
+/**
+ * Parses one ENROLL response: key(32) + 9000, exact length. Fills key
+ * only on success. 6985 = the phone's enrollment window is closed.
+ */
+bool parseEnrollResponse(const uint8_t* resp, size_t len, uint8_t key[KEY_LEN]);
+
 /** HMAC-SHA256 (compact implementation, no dependencies). */
 void hmacSha256(const uint8_t* key, size_t keyLen,
                 const uint8_t* msg, size_t msgLen,
@@ -87,12 +115,17 @@ void hmacSha256(const uint8_t* key, size_t keyLen,
 void sha256Bytes(const uint8_t* data, size_t len, uint8_t out[HMAC_LEN]);
 
 /**
- * Recomputes HMAC-SHA256(key, credId || nonce) and compares in constant
- * time. Secrets are never logged — callers must only log the boolean.
+ * Wrap a phone key for the pairing request (hex, 64 chars):
+ *   key XOR HMAC-SHA256(readerSecret,
+ *       "pulse-hce-key-wrap/v1\n" || credId || "\n" || keyNonceHex)
+ * keyNonceHex must be fresh per pairing (lowercase hex, 32 chars). The
+ * request that carries it is Pulse-HMAC signed, so it is also integrity
+ * protected; B2B-Core (HceCredentialAuth) derives the same pad.
  */
-bool verifyChallengeResponse(const ChallengeResponse& r,
-                             const uint8_t nonce[NONCE_LEN],
-                             const uint8_t* key, size_t keyLen);
+std::string wrapKeyHex(const std::string& readerSecret,
+                       const std::string& credId,
+                       const std::string& keyNonceHex,
+                       const uint8_t key[KEY_LEN]);
 
 }  // namespace Hce
 }  // namespace Presence

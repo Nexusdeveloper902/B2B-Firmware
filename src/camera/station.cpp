@@ -561,7 +561,7 @@ void Station::doCaptureAndUpload() {
     }
 }
 
-void Station::doAssociate(const std::string& uid) {
+void Station::doAssociate(const std::string& uid, const HceProof& proof) {
     expireStaleTransactions(millis());
     if (backendCaptureId_ <= 0) {
         Serial.println("[EN] No pending capture id — press ENTER first.");
@@ -570,7 +570,7 @@ void Station::doAssociate(const std::string& uid) {
     }
 
     const long target = backendCaptureId_;
-    std::string body = buildAssociatePayload(uid);
+    std::string body = buildAssociatePayload(uid, proof);  // TASK-015: relayed phone proof
     std::string path = "/api/v1/recycling/captures/" + std::to_string(target) + "/associate";
     HttpResponse r = post(path, body);
     reportUpload("associate", r.status, String(r.body.c_str()), r.transportOk);
@@ -799,6 +799,8 @@ void Station::switchMode() {
     debouncer_.reset();  // a tap in flight must not straddle the switch
     backendCaptureId_ = -1;  // pending bottle must not cross modes (anti-steal)
     armedEventId_ = -1;      // armed card-first must not cross modes
+    // TASK-015: only PAIRING asks a phone for its key (ENROLL).
+    nfc_.setEnrollment(mode_->kind() == ModeKind::Pairing, READER_API_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -822,7 +824,8 @@ void Station::handleCardTap(const std::string& uid) {
     // Same kind contract as the reader main: "hce" (phone authenticated
     // through the APDU exchange) reaches pairing as credential_kind; the
     // tap/associate lookups stay credential_uid-only (RF UID ≠ identity).
-    ApiCall call = mode_->onCardTap(uid, nfc_.lastKind());
+    // TASK-015: HCE taps carry the relayed proof (verified by B2B-Core).
+    ApiCall call = mode_->onCardTap(uid, nfc_.lastKind(), nfc_.lastProof());
     // Lazy expiry first: an expired pending must not steal this tap.
     expireStaleTransactions(millis());
     // Bottle-first pending: a physical tap IS the associate (no new tap
@@ -830,7 +833,7 @@ void Station::handleCardTap(const std::string& uid) {
     if (call.type == ApiCallType::Tap && backendCaptureId_ > 0) {
         Serial.printf("[STATION] tap closes pending capture %ld — associating, no new event / el toque cierra la captura pendiente %ld — asociando\n",
                       (long) backendCaptureId_, (long) backendCaptureId_);
-        doAssociate(uid);
+        doAssociate(uid, nfc_.lastProof());
         return;
     }
     HttpResponse response = post(call.path, call.jsonBody);
@@ -922,6 +925,14 @@ void Station::handleCardTap(const std::string& uid) {
                 Serial.println(result.message.c_str());
                 Serial.println("     use a FRESH card — the session stays armed / usa una");
                 Serial.println("     tarjeta NUEVA — la sesion sigue armada");
+                break;
+            case PairOutcome::ProofRejected:
+                // TASK-015: the phone's handed-over key did not verify its
+                // own proof (or it was replayed). Session stays armed.
+                Serial.print("[403] ");
+                Serial.println(result.message.c_str());
+                Serial.println("     on the phone tap \"Link this phone\" again, then re-tap /");
+                Serial.println("     en el telefono toca \"Vincular este telefono\" y acerca de nuevo");
                 break;
             case PairOutcome::AuthFailure:
                 Serial.println("[401] reader key rejected / clave de lector rechazada");

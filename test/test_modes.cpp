@@ -52,6 +52,24 @@ void test_operation_mode_ignores_credential_kind(void) {
     TEST_ASSERT_NULL(strstr(call.jsonBody.c_str(), "credential_kind"));
 }
 
+void test_both_modes_forward_the_relayed_proof(void) {
+    Presence::HceProof proof;
+    proof.nonceHex = "0123456789abcdef";
+    proof.macHex = std::string(64, 'a');
+    proof.keyNonceHex = std::string(32, 'b');
+    proof.keyWrappedHex = std::string(64, 'c');
+
+    Presence::OperationMode op;
+    const Presence::ApiCall tap = op.onCardTap("PLS-K3Y7V3CT0R5Z", "hce", proof);
+    TEST_ASSERT_NOT_NULL(strstr(tap.jsonBody.c_str(), "\"hce_mac\""));
+    TEST_ASSERT_NULL(strstr(tap.jsonBody.c_str(), "hce_key_wrapped"));
+
+    Presence::PairingMode pair;
+    const Presence::ApiCall p = pair.onCardTap("PLS-K3Y7V3CT0R5Z", "hce", proof);
+    TEST_ASSERT_NOT_NULL(strstr(p.jsonBody.c_str(), "\"hce_mac\""));
+    TEST_ASSERT_NOT_NULL(strstr(p.jsonBody.c_str(), "\"hce_key_wrapped\""));
+}
+
 void test_mode_labels_are_bilingual(void) {
     Presence::OperationMode op;
     Presence::PairingMode pair;
@@ -184,6 +202,7 @@ void runModeTests() {
     RUN_TEST(test_operation_mode_routes_tap_to_events_endpoint);
     RUN_TEST(test_pairing_mode_routes_tap_to_pair_endpoint);
     RUN_TEST(test_pairing_mode_forwards_hce_kind);
+    RUN_TEST(test_both_modes_forward_the_relayed_proof);
     RUN_TEST(test_operation_mode_ignores_credential_kind);
     RUN_TEST(test_mode_labels_are_bilingual);
     RUN_TEST(test_mode_kind_polymorphism);

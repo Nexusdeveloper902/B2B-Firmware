@@ -139,28 +139,38 @@ mirror the LED patterns.
 - [ ] 9.1 Power-cycle 3 times in a row; every boot reaches the idle
       pattern within 20 s and stays stable for 2 min.
 
-## 10. Android HCE phone (ISO-DEP + APDU path)
+## 10. Android HCE phone (ISO-DEP + APDU path, per-credential keys)
 
 - [ ] 10.1 Install `B2B-App/pulse-credential` on the phone, enable NFC,
-      open the app once (`READY TO TAP`). Confirm `HCE_SECRET` matches
-      `include/secrets.h` (mismatch fails closed by design).
-- [ ] 10.2 OPERATION, unpaired phone: tap + hold 1–2 s → serial shows
-      `ISO-DEP target` + `HCE credential authenticated: <credId>` and
-      `[404]` (unknown card) + the pair-the-card hint — NOT a hex UID.
-      Read the `target SAK=…` line first: `0x08` = phone not offering HCE
-      (check the phone side), `0x20` + `ATS=0B` = RATS failed (hold the
-      phone steadier/longer, remove case, retry). MIFARE cards still tap
-      normally (no regression).
-- [ ] 10.3 PAIRING, armed window: tap the phone → `[OK] card paired to:`
-      + desk success line; backend `cards` row has `kind = hce` and the
-      desk badges it “Phone”.
-- [ ] 10.4 OPERATION, paired phone: tap → `[OK] event logged` for the
-      right student. Tap 3×, note the UID-length log lines differ per tap
-      (randomized RF UID) while the SAME credential id authenticates —
-      the UID-independence proof (spec §“UID-independence evidence”).
-- [ ] 10.5 Revoke the card server-side (`status = revoked`) → phone tap
-      `[404]`; unpair → tap `[404]`; re-pair to another student → works
-      with `kind = hce` preserved.
+      open the app once. With no key yet the card shows `NOT LINKED`
+      (Diagnostics → Credential key: missing). There is NO HCE secret to
+      match on the reader (ADR-018).
+- [ ] 10.2 OPERATION, unlinked phone: tap + hold 1–2 s → serial shows
+      `ISO-DEP target` + `HCE phone has NO key yet (6A88)` and no backend
+      call — NOT a hex UID. Read the `target SAK=…` line first: `0x08` =
+      phone not offering HCE (check the phone side), `0x20` + `ATS=0B` =
+      RATS failed (hold the phone steadier/longer, remove case, retry).
+      MIFARE cards still tap normally (no regression).
+- [ ] 10.3 PAIRING, armed window, phone link window NOT open: tap →
+      `HCE ENROLL refused`; no card row is created; session stays armed.
+- [ ] 10.4 PAIRING, armed window: on the phone "Link this phone" →
+      Start, then tap → `HCE key received and wrapped …` + `[OK] card
+      paired to:`; backend `cards` row has `kind = hce`, a
+      `hce_credential_keys` row exists, and the desk badges it “Phone”.
+      Confirm the serial log shows NO 64-hex key-looking value.
+- [ ] 10.5 OPERATION, paired phone: tap → `HCE credential read (proof
+      relayed …)` + `[OK] event logged` for the right student. Tap 3×
+      (also with the screen locked), note the UID-length lines differ per
+      tap (randomized RF UID) while the SAME credential id is accepted —
+      the UID-independence proof.
+- [ ] 10.6 Revoke the phone on the pairing desk → next tap `[404]`
+      (inactive). Re-arm the same student + link again → `[422]` (a
+      revoked phone is never re-keyed). Unpair → link + pair → works.
+- [ ] 10.7 Reinstall the app (same id, Keystore wiped): tap → `6A88`;
+      re-arm the SAME student + link → `[OK]` (re-keyed), old history kept.
+- [ ] 10.8 Record timing: SELECT→CHALLENGE (Keystore HMAC) still within
+      the phone's frame-wait budget on this handset (compare with the
+      pre-TASK-015 bench notes).
 
 ---
 

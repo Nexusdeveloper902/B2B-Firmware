@@ -5,6 +5,7 @@
 
 #include <string>
 
+#include "Modes.h"
 #include "ResponseParser.h"
 
 // --- helpers ---------------------------------------------------------------
@@ -186,6 +187,25 @@ void test_pair_garbage_body_is_unknown_not_crash(void) {
                           static_cast<int>(r.outcome));
 }
 
+// TASK-015: a refused phone proof is a rejection the operator must see.
+void test_tap_phone_proof_refused_403_is_a_card_rejection(void) {
+    Presence::TapResult r =
+        Presence::parseTapResponse(403, errBody("Phone credential could not be verified"));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(Presence::TapOutcome::CardNotRecognized),
+                          static_cast<int>(r.outcome));
+    TEST_ASSERT_EQUAL_STRING("Phone credential could not be verified", r.message.c_str());
+}
+
+void test_pair_phone_proof_refused_403(void) {
+    Presence::PairResult r =
+        Presence::parsePairResponse(403, errBody("Phone credential could not be verified"));
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(Presence::PairOutcome::ProofRejected),
+                          static_cast<int>(r.outcome));
+    Presence::PairingMode mode;
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(Presence::FeedbackKind::PairAlreadyPaired),
+                          static_cast<int>(mode.interpret(r).kind));
+}
+
 void runResponseTests() {
     RUN_TEST(test_tap_success);
     RUN_TEST(test_tap_success_recycling_next_step);
@@ -198,6 +218,8 @@ void runResponseTests() {
     RUN_TEST(test_tap_network_error_timeout);
     RUN_TEST(test_tap_garbage_body_on_200_is_unknown_not_crash);
     RUN_TEST(test_tap_empty_body_404_stays_responsive);
+    RUN_TEST(test_tap_phone_proof_refused_403_is_a_card_rejection);
+    RUN_TEST(test_pair_phone_proof_refused_403);
     RUN_TEST(test_pair_success);
     RUN_TEST(test_pair_no_active_session_409);
     RUN_TEST(test_pair_already_paired_422);

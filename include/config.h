@@ -25,4 +25,4 @@
 // on every behavior-changing flash so serial logs self-identify (we
 // lost rounds to testing stale builds). Format hce.<n>, counting the
 // HCE bench flashes that preceded the scheme.
-#define PULSE_FW_BUILD "hce.18"  // multipart-canonical signing fix: classify/capture sign event_id+image.sha256 (was raw bytes PHP never sees)
+#define PULSE_FW_BUILD "hce.19"  // TASK-015: per-credential HCE keys — reader relays proof, ENROLL in pairing, no HCE_SECRET

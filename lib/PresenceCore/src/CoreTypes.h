@@ -24,6 +24,32 @@ enum class ModeKind {
 };
 
 // ---------------------------------------------------------------------------
+// HCE relay proof (TASK-015, ADR-018) / Prueba HCE retransmitida
+// ---------------------------------------------------------------------------
+// What an HCE tap carries to the backend. The reader does NOT verify the
+// phone (it holds no HCE key): it relays its own challenge nonce and the
+// phone's MAC, and B2B-Core checks them against that credential's key.
+// In PAIRING mode the phone's key rides along too — never raw, always
+// wrapped under this reader's API key (Hce::wrapKeyHex). Empty for
+// physical cards, so their payloads stay byte-identical.
+// / Lo que lleva un toque HCE al backend: el lector NO verifica, retransmite.
+struct HceProof {
+    std::string nonceHex;       // 16 hex — the reader's CHALLENGE nonce
+    std::string macHex;         // 64 hex — the phone's HMAC, unverified here
+    std::string keyWrappedHex;  // 64 hex — pairing only
+    std::string keyNonceHex;    // 32 hex — pairing only (fresh per pairing)
+
+    bool present() const { return !nonceHex.empty() && !macHex.empty(); }
+    bool hasKey() const { return !keyWrappedHex.empty() && !keyNonceHex.empty(); }
+    void clear() {
+        nonceHex.clear();
+        macHex.clear();
+        keyWrappedHex.clear();
+        keyNonceHex.clear();
+    }
+};
+
+// ---------------------------------------------------------------------------
 // API calls the firmware can make / Llamadas que el firmware puede hacer
 // ---------------------------------------------------------------------------
 enum class ApiCallType {
@@ -66,7 +92,7 @@ inline std::string bearerAuthorizationValue(const std::string& bearerKey) {
 // ---------------------------------------------------------------------------
 enum class TapOutcome {
     Success,           // 200 {"status":"ok"}
-    CardNotRecognized, // 404 (unknown card, or card not active)
+    CardNotRecognized, // 404 (unknown card, or card not active); 403 (phone proof refused)
     AuthFailure,       // 401 missing/invalid reader key
     ValidationError,   // 422 (malformed payload — should not happen in practice)
     ServerError,       // any other 5xx
@@ -90,6 +116,7 @@ enum class PairOutcome {
     Success,          // 200 {"status":"ok"} — card linked to student
     NoActiveSession,  // 409 — no armed pairing session
     AlreadyPaired,    // 422 — credential_uid already linked to a card
+    ProofRejected,    // 403 — phone's key/proof did not verify (TASK-015)
     AuthFailure,      // 401 missing/invalid reader key
     ValidationError,  // other 422 (malformed body)
     ServerError,      // any other 5xx
