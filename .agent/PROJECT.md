@@ -197,3 +197,13 @@ ADR-004's default clause); DevKit via `-e esp32dev` / `flash.sh
 - Verification: native 128/128 (+3), `esp32cam` + `esp32dev` SUCCESS.
   Bench reflash to `hce.18` pending (tap → auto-capture →
   `classify: HTTP 200`).
+
+## Bench note (2026-09-16, OBS-002)
+
+The `_pulse._tcp` discovery fallback on the bench LAN was a network
+issue, not a firmware bug: station → host multicast is dropped there.
+B2B-Core's `./run serve` now re-announces the service unasked from port
+5353 (its ADR-067), and the reader discovers the backend reliably with
+no firmware change (4/4 boots, versus 0/2 without the announcer). The
+phone speaker bridge (B2B-App TASK-002) also consumes backend taps, so
+repeat taps and unknown cards now beep too (B2B-Core ADR-066).
